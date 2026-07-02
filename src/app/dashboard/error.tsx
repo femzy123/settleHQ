@@ -15,7 +15,7 @@ export default function DashboardError({
           <AlertTriangle aria-hidden="true" />
         </div>
         <h1 className="mt-5 text-xl font-semibold">Dashboard could not load</h1>
-        <p className="mt-2 text-sm leading-6 text-muted">
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
           We could not finish syncing your SettleHQ user profile. Check the
           database configuration and try again.
         </p>

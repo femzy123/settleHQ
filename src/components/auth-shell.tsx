@@ -2,6 +2,8 @@ import { Building2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
+
 type AuthShellProps = {
   children: ReactNode;
   eyebrow: string;
@@ -19,17 +21,20 @@ export function AuthShell({
     <main className="min-h-screen bg-background text-foreground">
       <div className="grid min-h-screen lg:grid-cols-[1fr_480px]">
         <section className="flex min-h-[42vh] flex-col justify-between bg-primary px-6 py-6 text-primary-foreground sm:px-10 lg:min-h-screen">
-          <Link href="/" className="flex w-fit items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
-              <Building2 aria-hidden="true" />
-            </span>
-            <span>
-              <span className="block text-lg font-semibold">SettleHQ</span>
-              <span className="block text-sm text-primary-foreground/70">
-                Obligations dashboard
+          <header className="flex items-center justify-between gap-4">
+            <Link href="/" className="flex w-fit items-center gap-3">
+              <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                <Building2 aria-hidden="true" />
               </span>
-            </span>
-          </Link>
+              <span>
+                <span className="block text-lg font-semibold">SettleHQ</span>
+                <span className="block text-sm text-primary-foreground/70">
+                  Obligations dashboard
+                </span>
+              </span>
+            </Link>
+            <ThemeToggle />
+          </header>
 
           <div className="max-w-2xl py-10 lg:py-0">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
@@ -43,7 +48,7 @@ export function AuthShell({
             </p>
           </div>
 
-          <div className="hidden max-w-xl rounded-lg border border-white/15 bg-white/10 p-4 text-sm text-primary-foreground/76 lg:block">
+          <div className="hidden max-w-xl rounded-lg border border-primary-foreground/15 bg-primary-foreground/10 p-4 text-sm text-primary-foreground/76 lg:block">
             <div className="flex items-start gap-3">
               <ShieldCheck aria-hidden="true" className="mt-0.5 text-accent" />
               <p>

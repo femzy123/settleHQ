@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { ThemeToggle } from "@/components/theme-toggle";
+
 const proofPoints = [
   "Collections before payments",
   "Temporary invoice payment instructions",
@@ -26,15 +28,18 @@ export default function Home() {
               </div>
               <div>
                 <p className="text-lg font-semibold">SettleHQ</p>
-                <p className="text-sm text-muted">Financial obligations OS</p>
+                <p className="text-sm text-muted-foreground">Financial obligations OS</p>
               </div>
             </div>
-            <Link
-              href="/sign-in"
-              className="inline-flex h-10 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium"
-            >
-              Sign in
-            </Link>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <Link
+                href="/sign-in"
+                className="inline-flex h-10 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium hover:bg-surface-strong"
+              >
+                Sign in
+              </Link>
+            </div>
           </header>
 
           <div className="max-w-3xl py-16 sm:py-20 lg:py-0">
@@ -44,7 +49,7 @@ export default function Home() {
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
               Track who owes, what is due, and what has settled.
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-muted sm:text-lg">
+            <p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
               SettleHQ gives schools, estates, clubs, and service businesses one
               operational dashboard for collections, invoices, payments,
               receipts, and reconciliation.
@@ -52,7 +57,7 @@ export default function Home() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/sign-up"
-                className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground"
+                className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
               >
                 Create account
                 <ArrowRight aria-hidden="true" />
@@ -60,7 +65,7 @@ export default function Home() {
               <Link
                 href="/dashboard"
                 prefetch={false}
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface px-5 text-sm font-medium"
+                className="inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface px-5 text-sm font-medium hover:bg-surface-strong"
               >
                 Open dashboard
               </Link>
@@ -71,7 +76,7 @@ export default function Home() {
             {proofPoints.map((point) => (
               <div
                 key={point}
-                className="flex items-center gap-2 text-sm text-muted"
+                className="flex items-center gap-2 text-sm text-muted-foreground"
               >
                 <CheckCircle2 aria-hidden="true" className="text-primary" />
                 <span>{point}</span>
@@ -81,13 +86,13 @@ export default function Home() {
         </div>
 
         <aside className="border-t border-border bg-primary p-5 text-primary-foreground sm:p-8 lg:border-l lg:border-t-0">
-          <div className="flex h-full min-h-[420px] flex-col justify-between rounded-lg border border-white/15 bg-white/10 p-5">
+          <div className="flex h-full min-h-105 flex-col justify-between rounded-lg border border-primary-foreground/15 bg-primary-foreground/10 p-5">
             <div>
               <p className="text-sm font-medium text-primary-foreground/70">
                 Dashboard preview
               </p>
               <h2 className="mt-2 text-2xl font-semibold">
-                Greenfield School Finance
+                Sample School Finance
               </h2>
             </div>
 
@@ -107,7 +112,7 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="rounded-lg border border-white/15 p-4">
+            <div className="rounded-lg border border-primary-foreground/15 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold">Reconciliation Center</p>
@@ -117,7 +122,7 @@ export default function Home() {
                 </div>
                 <ReceiptText aria-hidden="true" className="text-accent" />
               </div>
-              <div className="mt-4 flex items-center gap-3 rounded-lg bg-white/10 p-3 text-sm">
+              <div className="mt-4 flex items-center gap-3 rounded-lg bg-primary-foreground/10 p-3 text-sm">
                 <ListChecks aria-hidden="true" />
                 <span>94 automatically matched payments</span>
               </div>

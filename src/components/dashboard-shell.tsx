@@ -53,7 +53,7 @@ export function DashboardShell({
 }: DashboardShellProps) {
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="min-h-screen lg:pl-[264px]">
+      <div className="min-h-screen lg:pl-66">
         <AppSidebar
           activeItem="Dashboard"
           userEmail={userEmail}

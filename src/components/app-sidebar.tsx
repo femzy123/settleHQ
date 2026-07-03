@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import {
   Building2,
   FileText,
@@ -14,10 +16,23 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+export type AppSidebarItem =
+  | "Dashboard"
+  | "Collections"
+  | "Payers"
+  | "Invoices"
+  | "Payments"
+  | "Reports"
+  | "Settings";
+
+const navItems: Array<{
+  label: AppSidebarItem;
+  href: string;
+  icon: typeof LayoutDashboard;
+}> = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Collections", href: "#", icon: ListChecks },
-  { label: "Payers", href: "#", icon: UsersRound },
+  { label: "Collections", href: "/collections", icon: ListChecks },
+  { label: "Payers", href: "/payers", icon: UsersRound },
   { label: "Invoices", href: "#", icon: FileText },
   { label: "Payments", href: "#", icon: WalletCards },
   { label: "Reports", href: "#", icon: ReceiptText },
@@ -25,7 +40,7 @@ const navItems = [
 ];
 
 type AppSidebarProps = {
-  activeItem: "Dashboard" | "Settings";
+  activeItem: AppSidebarItem;
   userEmail: string;
   userName?: string | null;
 };
@@ -38,7 +53,7 @@ export function AppSidebar({
   const displayName = userName || "SettleHQ user";
 
   return (
-    <aside className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 lg:w-[264px] lg:border-b-0 lg:border-r">
+    <aside className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 lg:w-66 lg:border-b-0 lg:border-r">
       <div className="flex min-h-full flex-col gap-7 px-5 py-6 lg:h-screen">
         <Link href="/dashboard" className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
@@ -93,5 +108,32 @@ export function AppSidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+type AppShellProps = {
+  activeItem: AppSidebarItem;
+  userEmail: string;
+  userName?: string | null;
+  children: ReactNode;
+};
+
+export function AppShell({
+  activeItem,
+  userEmail,
+  userName,
+  children,
+}: AppShellProps) {
+  return (
+    <main className="min-h-screen bg-background text-foreground">
+      <div className="min-h-screen lg:pl-66">
+        <AppSidebar
+          activeItem={activeItem}
+          userEmail={userEmail}
+          userName={userName}
+        />
+        <section className="px-4 py-5 sm:px-6 lg:px-8">{children}</section>
+      </div>
+    </main>
   );
 }

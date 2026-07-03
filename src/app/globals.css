@@ -15,7 +15,7 @@ html[data-theme="light"] {
   --surface-strong: #eef2e8;
   --surface-muted: #f2f5ee;
   --border: #dfe5da;
-  --input: #ffffff;
+  --input: #cbd6c7;
   --primary: #234337;
   --primary-hover: #1a3329;
   --primary-foreground: #ffffff;
@@ -61,7 +61,7 @@ html[data-theme="dark"] {
   --surface-strong: #17261f;
   --surface-muted: #0d1915;
   --border: #2b3b34;
-  --input: #13221c;
+  --input: #4b5f54;
   --primary: #d9c17a;
   --primary-hover: #e6cf88;
   --primary-foreground: #0b1511;

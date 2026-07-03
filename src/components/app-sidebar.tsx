@@ -27,15 +27,15 @@ export type AppSidebarItem =
 
 const navItems: Array<{
   label: AppSidebarItem;
-  href: string;
+  href?: string;
   icon: typeof LayoutDashboard;
 }> = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Collections", href: "/collections", icon: ListChecks },
   { label: "Payers", href: "/payers", icon: UsersRound },
-  { label: "Invoices", href: "#", icon: FileText },
-  { label: "Payments", href: "#", icon: WalletCards },
-  { label: "Reports", href: "#", icon: ReceiptText },
+  { label: "Invoices", href: "/invoices", icon: FileText },
+  { label: "Payments", icon: WalletCards },
+  { label: "Reports", icon: ReceiptText },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -71,19 +71,34 @@ export function AppSidebar({
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = item.label === activeItem;
+            const itemClassName = cn(
+              "flex min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
+              active
+                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                : item.href
+                  ? "text-sidebar-foreground/76 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
+                  : "text-sidebar-foreground/42",
+            );
+
+            if (!item.href) {
+              return (
+                <span
+                  key={item.label}
+                  aria-disabled="true"
+                  className={itemClassName}
+                >
+                  <Icon aria-hidden="true" />
+                  {item.label}
+                </span>
+              );
+            }
 
             return (
               <Link
                 key={item.label}
                 href={item.href}
-                prefetch={item.href === "#" ? false : undefined}
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                    : "text-sidebar-foreground/76 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground",
-                )}
+                className={itemClassName}
               >
                 <Icon aria-hidden="true" />
                 {item.label}
@@ -91,7 +106,6 @@ export function AppSidebar({
             );
           })}
         </nav>
-
         <div className="mt-auto rounded-lg border border-sidebar-border bg-sidebar-foreground/10 p-3">
           <div className="flex items-center gap-3">
             <UserMenu />

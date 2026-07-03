@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { validateCollectionInput } from "@/lib/collections";
 import { CollectionError, createDraftCollection } from "@/server/collections";
+import { generateInvoicesForCollection } from "@/server/invoices";
 import { syncCurrentUser } from "@/server/users";
 import { getActiveWorkspaceForUser } from "@/server/workspaces";
 
@@ -64,5 +65,35 @@ export async function createCollectionAction(
   }
 
   revalidatePath("/collections");
+  redirect(`/collections/${collectionId}`);
+}
+
+export async function generateInvoicesAction(formData: FormData) {
+  const collectionId = Number(formData.get("collectionId"));
+
+  if (!Number.isInteger(collectionId) || collectionId <= 0) {
+    return;
+  }
+
+  const user = await syncCurrentUser();
+  const workspace = await getActiveWorkspaceForUser(user.id);
+
+  if (!workspace) {
+    redirect("/onboarding");
+  }
+
+  try {
+    await generateInvoicesForCollection(
+      workspace.organization.id,
+      workspace.organization.name,
+      collectionId,
+    );
+  } catch {
+    redirect(`/collections/${collectionId}`);
+  }
+
+  revalidatePath("/collections");
+  revalidatePath(`/collections/${collectionId}`);
+  revalidatePath("/invoices");
   redirect(`/collections/${collectionId}`);
 }

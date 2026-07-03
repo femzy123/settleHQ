@@ -116,7 +116,6 @@ async function getNombaAccessToken() {
   }
 
   const config = getRequiredNombaConfig();
-  console.log("config", config);
   const response = await fetch(
     `${config.baseUrl}/auth/token/issue`,
     {

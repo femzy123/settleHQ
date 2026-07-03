@@ -1,12 +1,14 @@
-﻿import crypto from "node:crypto";
-
 import { NextResponse } from "next/server";
 
-import { getDb, canUseDb } from "@/db";
+import { canUseDb, getDb } from "@/db";
 import { webhookEvents } from "@/db/schema";
+import {
+  verifyNombaWebhookSignature,
+  type NombaWebhookPayload,
+} from "@/lib/nomba-webhook";
 
 type JsonObject = Record<string, unknown>;
-type WebhookPayload = JsonObject;
+type WebhookPayload = NombaWebhookPayload;
 
 export const runtime = "nodejs";
 
@@ -35,72 +37,11 @@ function headersToRecord(headers: Headers) {
   return Object.fromEntries(headers.entries());
 }
 
-function timingSafeEqualText(left: string, right: string) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function getSignaturePayload(payload: WebhookPayload, timestamp: string) {
-  const data = asObject(payload.data);
-  const merchant = asObject(data.merchant);
-  const transaction = asObject(data.transaction);
-  let responseCode = asString(transaction.responseCode);
-
-  if (responseCode.toLowerCase() === "null") {
-    responseCode = "";
-  }
-
-  return [
-    asString(payload.event_type),
-    asString(payload.requestId),
-    asString(merchant.userId),
-    asString(merchant.walletId),
-    asString(transaction.transactionId),
-    asString(transaction.type),
-    asString(transaction.time),
-    responseCode,
-    timestamp,
-  ].join(":");
-}
-
-function verifyNombaSignature(payload: WebhookPayload, headers: Headers) {
-  const secret = process.env.NOMBA_WEBHOOK_SECRET;
-  const signatureHeader =
-    headers.get("nomba-signature") ?? headers.get("nomba-sig-value");
-  const timestamp = headers.get("nomba-timestamp");
-  const algorithm = headers.get("nomba-signature-algorithm");
-
-  if (!secret) {
-    return { ok: false, reason: "Webhook secret is not configured" };
-  }
-
-  if (!signatureHeader) {
-    return { ok: false, reason: "Missing nomba-signature header" };
-  }
-
-  if (!timestamp) {
-    return { ok: false, reason: "Missing nomba-timestamp header" };
-  }
-
-  if (algorithm && algorithm.toLowerCase() !== "hmacsha256") {
-    return { ok: false, reason: "Unsupported Nomba signature algorithm" };
-  }
-
-  const signaturePayload = getSignaturePayload(payload, timestamp);
-  const expectedSignature = crypto
-    .createHmac("sha256", secret)
-    .update(signaturePayload, "utf8")
-    .digest("base64");
-
+function getNombaSignatureHeaders(headers: Headers) {
   return {
-    ok: timingSafeEqualText(signatureHeader.trim(), expectedSignature),
-    reason: "Invalid webhook signature",
+    signature: headers.get("nomba-signature") ?? headers.get("nomba-sig-value"),
+    timestamp: headers.get("nomba-timestamp"),
+    algorithm: headers.get("nomba-signature-algorithm"),
   };
 }
 
@@ -124,12 +65,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const signature = verifyNombaSignature(payload, request.headers);
+  const signature = verifyNombaWebhookSignature({
+    payload,
+    secret: process.env.NOMBA_WEBHOOK_SECRET,
+    headers: getNombaSignatureHeaders(request.headers),
+  });
 
   if (!signature.ok) {
+    const reason = signature.reason ?? "Invalid webhook signature";
+
     return NextResponse.json(
-      { ok: false, error: signature.reason },
-      { status: signature.reason.includes("configured") ? 500 : 401 },
+      { ok: false, error: reason },
+      { status: reason.includes("configured") ? 500 : 401 },
     );
   }
 
@@ -140,7 +87,12 @@ export async function POST(request: Request) {
   const event = {
     provider: "nomba",
     providerEventId: pickString(payload, ["requestId", "request_id", "id"]),
-    eventType: pickString(payload, ["event_type", "event", "eventType", "type"]),
+    eventType: pickString(payload, [
+      "event_type",
+      "event",
+      "eventType",
+      "type",
+    ]),
     providerReference:
       asString(transaction.aliasAccountReference) ||
       asString(transaction.transactionId) ||
@@ -189,7 +141,8 @@ export async function POST(request: Request) {
         ok: false,
         stored: false,
         verified: true,
-        error: error instanceof Error ? error.message : "Webhook persistence failed",
+        error:
+          error instanceof Error ? error.message : "Webhook persistence failed",
       },
       { status: 500 },
     );

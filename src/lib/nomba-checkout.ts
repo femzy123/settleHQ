@@ -1,3 +1,8 @@
+export const NOMBA_CHECKOUT_ALLOWED_PAYMENT_METHODS = [
+  "Card",
+  "Transfer",
+] as const;
+
 export type NombaCheckoutMetadata = Record<string, string>;
 
 export type BuildCheckoutOrderInput = {
@@ -20,7 +25,7 @@ export type NombaCheckoutOrderPayload = {
     amount: number;
     currency: string;
     accountId: string;
-    allowedPaymentMethods: string[];
+    allowedPaymentMethods: [...typeof NOMBA_CHECKOUT_ALLOWED_PAYMENT_METHODS];
     orderMetaData: NombaCheckoutMetadata;
   };
   tokenizeCard: boolean;
@@ -53,7 +58,7 @@ export function buildCheckoutOrderPayload({
       amount: koboToCheckoutAmount(amountKobo),
       currency,
       accountId,
-      allowedPaymentMethods: ["Card", "Transfer"],
+      allowedPaymentMethods: [...NOMBA_CHECKOUT_ALLOWED_PAYMENT_METHODS],
       orderMetaData: metadata,
     },
     tokenizeCard: false,

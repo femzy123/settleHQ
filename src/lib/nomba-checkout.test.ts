@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  NOMBA_CHECKOUT_ALLOWED_PAYMENT_METHODS,
   buildCheckoutOrderPayload,
   getCheckoutLinkFromResponse,
   koboToCheckoutAmount,
 } from "./nomba-checkout";
 
 describe("nomba checkout helpers", () => {
+  it("allows only Card and Transfer payment methods", () => {
+    expect(NOMBA_CHECKOUT_ALLOWED_PAYMENT_METHODS).toEqual([
+      "Card",
+      "Transfer",
+    ]);
+  });
   it("converts kobo into checkout amount", () => {
     expect(koboToCheckoutAmount(150_000)).toBe(1500);
     expect(koboToCheckoutAmount(150_050)).toBe(1500.5);

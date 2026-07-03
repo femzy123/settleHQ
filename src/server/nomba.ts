@@ -116,18 +116,22 @@ async function getNombaAccessToken() {
   }
 
   const config = getRequiredNombaConfig();
-  const response = await fetch(`${config.baseUrl}/auth/token/issue`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      accountId: config.parentAccountId,
+  console.log("config", config);
+  const response = await fetch(
+    `${config.baseUrl}/auth/token/issue`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        accountId: config.parentAccountId,
+      },
+      body: JSON.stringify({
+        grant_type: "client_credentials",
+        client_id: config.clientId,
+        client_secret: config.privateKey,
+      }),
     },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      client_id: config.clientId,
-      client_secret: config.privateKey,
-    }),
-  });
+  );
   const body = await parseResponse(response);
 
   if (!response.ok) {

@@ -28,7 +28,9 @@ export default function Home() {
               </div>
               <div>
                 <p className="text-lg font-semibold">SettleHQ</p>
-                <p className="text-sm text-muted-foreground">Financial obligations OS</p>
+                <p className="text-sm text-muted-foreground">
+                  Financial obligations OS
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -57,7 +59,7 @@ export default function Home() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/sign-up"
-                className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
+                className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-white hover:bg-primary-hover"
               >
                 Create account
                 <ArrowRight aria-hidden="true" />

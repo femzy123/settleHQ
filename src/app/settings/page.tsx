@@ -19,7 +19,7 @@ export default async function SettingsPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="min-h-screen lg:pl-[264px]">
+      <div className="min-h-screen lg:pl-66">
         <AppSidebar
           activeItem="Settings"
           userEmail={user.email}
@@ -40,7 +40,7 @@ export default async function SettingsPage() {
           </header>
 
           <div className="grid gap-5 py-6 xl:grid-cols-[1fr_360px]">
-            <section className="rounded-lg border border-border bg-surface p-5 shadow-[var(--shadow-soft)]">
+            <section className="rounded-lg border border-border bg-surface p-5 shadow-(--shadow-soft)">
               <div className="flex items-center gap-3">
                 <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-accent">
                   <Settings aria-hidden="true" />
@@ -94,7 +94,7 @@ export default async function SettingsPage() {
             </section>
 
             <aside className="grid gap-5">
-              <section className="rounded-lg border border-border bg-surface p-5 shadow-[var(--shadow-soft)]">
+              <section className="rounded-lg border border-border bg-surface p-5 shadow-(--shadow-soft)">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-semibold">Collection wallet</h2>
@@ -114,7 +114,7 @@ export default async function SettingsPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border border-border bg-surface p-5 shadow-[var(--shadow-soft)]">
+              <section className="rounded-lg border border-border bg-surface p-5 shadow-(--shadow-soft)">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-semibold">

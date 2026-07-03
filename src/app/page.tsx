@@ -11,7 +11,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const proofPoints = [
   "Collections before payments",
-  "Temporary invoice payment instructions",
+  "Public invoice pages with Checkout",
   "Nomba webhooks for wallet confirmation",
   "Receipts and reconciliation from one dashboard",
 ];

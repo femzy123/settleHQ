@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { validateCollectionInput } from "@/lib/collections";
+import { runtimeEnv } from "@/lib/env";
 import { CollectionError, createDraftCollection } from "@/server/collections";
-import { generateInvoicesForCollection } from "@/server/invoices";
+import { InvoiceError, sendInvoicesForSelectedPayers } from "@/server/invoices";
 import { syncCurrentUser } from "@/server/users";
 import { getActiveWorkspaceForUser } from "@/server/workspaces";
 
@@ -28,6 +29,10 @@ function getInput(formData: FormData) {
     dueDate: String(formData.get("dueDate") ?? ""),
     payerIds: formData.getAll("payerIds").map(String),
   };
+}
+
+function getBaseAppUrl() {
+  return runtimeEnv.appUrl?.replace(/\/$/, "") ?? "";
 }
 
 export async function createCollectionAction(
@@ -68,8 +73,12 @@ export async function createCollectionAction(
   redirect(`/collections/${collectionId}`);
 }
 
-export async function generateInvoicesAction(formData: FormData) {
+export async function sendInvoicesAction(formData: FormData) {
   const collectionId = Number(formData.get("collectionId"));
+  const payerIds = formData
+    .getAll("payerIds")
+    .map((payerId) => Number(payerId))
+    .filter((payerId) => Number.isInteger(payerId) && payerId > 0);
 
   if (!Number.isInteger(collectionId) || collectionId <= 0) {
     return;
@@ -83,12 +92,34 @@ export async function generateInvoicesAction(formData: FormData) {
   }
 
   try {
-    await generateInvoicesForCollection(
+    const sentInvoices = await sendInvoicesForSelectedPayers(
       workspace.organization.id,
       workspace.organization.name,
       collectionId,
+      payerIds,
     );
-  } catch {
+    const baseUrl = getBaseAppUrl();
+
+    sentInvoices.forEach((invoice) => {
+      const publicUrl = `${baseUrl}${invoice.publicPath}`;
+
+      console.info("[SettleHQ invoice delivery]", {
+        deliveryMode: "console",
+        createdNow: invoice.wasCreated,
+        payerName: invoice.payer.fullName,
+        payerEmail: invoice.payer.email,
+        invoiceNumber: invoice.invoiceNumber,
+        publicUrl,
+      });
+    });
+  } catch (error) {
+    if (error instanceof InvoiceError) {
+      console.warn("[SettleHQ invoice delivery failed]", {
+        collectionId,
+        message: error.message,
+      });
+    }
+
     redirect(`/collections/${collectionId}`);
   }
 

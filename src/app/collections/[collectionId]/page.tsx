@@ -2,10 +2,9 @@ import { ArrowLeft, FileText, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { generateInvoicesAction } from "@/app/collections/actions";
+import { CollectionInvoiceSender } from "@/app/collections/[collectionId]/invoice-sender";
 import { AppShell } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,16 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatDate, formatKoboAsNaira } from "@/lib/money";
-import { cn } from "@/lib/utils";
 import { getCollectionForOrganization } from "@/server/collections";
 import { requireActiveWorkspace } from "@/server/current-workspace";
 import { listInvoicesForCollection } from "@/server/invoices";
@@ -31,14 +21,6 @@ import { listInvoicesForCollection } from "@/server/invoices";
 type CollectionDetailPageProps = {
   params: Promise<{ collectionId: string }>;
 };
-
-function getStatusBadgeVariant(status: string) {
-  if (status === "pending") {
-    return "outline";
-  }
-
-  return status === "paid" ? "secondary" : "outline";
-}
 
 export default async function CollectionDetailPage({
   params,
@@ -61,11 +43,27 @@ export default async function CollectionDetailPage({
   }
 
   const { collection, assignedPayers } = detail;
+  const invoiceByPayerId = new Map(
+    invoiceRows.map((invoice) => [invoice.payerId, invoice]),
+  );
+  const payerRows = assignedPayers.map((payer) => {
+    const invoice = invoiceByPayerId.get(payer.id);
+
+    return {
+      ...payer,
+      amountLabel: formatKoboAsNaira(collection.amountKobo),
+      invoice: invoice
+        ? {
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            status: invoice.status,
+            publicPath: `/invoice/${invoice.publicToken}`,
+          }
+        : null,
+    };
+  });
   const generatedInvoiceCount = invoiceRows.length;
-  const expectedTotalKobo =
-    generatedInvoiceCount > 0
-      ? invoiceRows.reduce((total, invoice) => total + invoice.amountDueKobo, 0)
-      : collection.amountKobo * assignedPayers.length;
+  const expectedTotalKobo = collection.amountKobo * assignedPayers.length;
   const amountPaidKobo = invoiceRows.reduce(
     (total, invoice) => total + invoice.amountPaidKobo,
     0,
@@ -74,7 +72,10 @@ export default async function CollectionDetailPage({
   const collectionRate = expectedTotalKobo
     ? Math.round((amountPaidKobo / expectedTotalKobo) * 100)
     : 0;
-  const canGenerateInvoices = generatedInvoiceCount < assignedPayers.length;
+  const awaitingInvoiceCount = Math.max(
+    assignedPayers.length - generatedInvoiceCount,
+    0,
+  );
 
   return (
     <AppShell
@@ -99,26 +100,10 @@ export default async function CollectionDetailPage({
               <Badge variant="outline">{collection.status}</Badge>
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              {collection.status === "draft"
-                ? "Generate invoices to activate this collection and create one obligation per assigned payer."
-                : "Active collection with generated invoices. Payment instructions are added in the next milestone."}
+              Select assigned payers and send their invoice links. Each payer
+              receives a unique invoice URL tied to their own obligation.
             </p>
           </div>
-
-          {canGenerateInvoices ? (
-            <form action={generateInvoicesAction}>
-              <input type="hidden" name="collectionId" value={collection.id} />
-              <button
-                type="submit"
-                className={cn(buttonVariants({ size: "lg" }))}
-              >
-                <FileText data-icon="inline-start" />
-                {collection.status === "draft"
-                  ? "Generate invoices"
-                  : "Generate missing invoices"}
-              </button>
-            </form>
-          ) : null}
         </header>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -126,7 +111,7 @@ export default async function CollectionDetailPage({
             ["Expected total", formatKoboAsNaira(expectedTotalKobo)],
             ["Collected", formatKoboAsNaira(amountPaidKobo)],
             ["Outstanding", formatKoboAsNaira(outstandingKobo)],
-            ["Collection rate", `${collectionRate}%`],
+            ["Awaiting invoice", String(awaitingInvoiceCount)],
           ].map(([label, value]) => (
             <Card key={label}>
               <CardHeader className="pb-2">
@@ -174,10 +159,19 @@ export default async function CollectionDetailPage({
                 <Separator />
                 <div>
                   <dt className="text-sm text-muted-foreground">
-                    Generated invoices
+                    Sent invoices
                   </dt>
                   <dd className="mt-1 font-medium tabular-nums">
                     {generatedInvoiceCount}
+                  </dd>
+                </div>
+                <Separator />
+                <div>
+                  <dt className="text-sm text-muted-foreground">
+                    Collection rate
+                  </dt>
+                  <dd className="mt-1 font-medium tabular-nums">
+                    {collectionRate}%
                   </dd>
                 </div>
                 {collection.description ? (
@@ -200,91 +194,19 @@ export default async function CollectionDetailPage({
           <Card>
             <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle>
-                  {generatedInvoiceCount > 0 ? "Invoices" : "Assigned payers"}
-                </CardTitle>
+                <CardTitle>Assigned payers</CardTitle>
                 <CardDescription>
-                  {generatedInvoiceCount > 0
-                    ? "Each invoice represents one payer obligation in this collection."
-                    : "These payers will receive invoices when the collection is activated."}
+                  Select payers and send invoice links. Already-sent invoices
+                  are protected from duplicate generation.
                 </CardDescription>
               </div>
               <UsersRound aria-hidden="true" className="text-accent" />
             </CardHeader>
             <CardContent>
-              {generatedInvoiceCount > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Payer</TableHead>
-                      <TableHead>Due</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoiceRows.map((invoice) => (
-                      <TableRow key={invoice.id}>
-                        <TableCell className="font-medium">
-                          <Link
-                            href={`/invoices/${invoice.id}`}
-                            className="hover:underline"
-                          >
-                            {invoice.invoiceNumber}
-                          </Link>
-                        </TableCell>
-                        <TableCell>{invoice.payer.fullName}</TableCell>
-                        <TableCell>{formatDate(invoice.dueDate)}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={getStatusBadgeVariant(invoice.status)}
-                          >
-                            {invoice.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatKoboAsNaira(invoice.amountDueKobo)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>External ID</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead className="text-right">Expected</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assignedPayers.map((payer) => (
-                      <TableRow key={payer.id}>
-                        <TableCell className="font-medium">
-                          <Link
-                            href={`/payers/${payer.id}`}
-                            className="hover:underline"
-                          >
-                            {payer.fullName}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {payer.externalId || "None"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {payer.email || payer.phone || "Not provided"}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatKoboAsNaira(collection.amountKobo)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+              <CollectionInvoiceSender
+                collectionId={collection.id}
+                rows={payerRows}
+              />
             </CardContent>
           </Card>
         </div>
@@ -292,19 +214,18 @@ export default async function CollectionDetailPage({
         <Card>
           <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Payment instructions</CardTitle>
+              <CardTitle>Invoice delivery</CardTitle>
               <CardDescription>
-                Nomba virtual accounts and checkout links are intentionally
-                next.
+                Email delivery is deferred; generated invoice links are logged
+                in the server console for now.
               </CardDescription>
             </div>
             <FileText aria-hidden="true" className="text-accent" />
           </CardHeader>
           <CardContent>
             <div className="rounded-lg border border-dashed border-border bg-muted/35 p-6 text-sm text-muted-foreground">
-              Generated invoices create the obligation records. The next
-              milestone will attach Nomba-powered payment options to each
-              invoice.
+              Each selected payer gets their own invoice record and public URL.
+              The Pay button appears on that payer-specific public invoice page.
             </div>
           </CardContent>
         </Card>

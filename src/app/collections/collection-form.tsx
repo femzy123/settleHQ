@@ -48,7 +48,7 @@ export function CollectionForm({ payers }: CollectionFormProps) {
         <div className="mb-5">
           <h2 className="text-lg font-semibold">Collection details</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Define the obligation. Invoices and payment instructions are
+            Define the obligation. Invoices and payer-facing invoice pages are
             generated in the next step of the product workflow.
           </p>
         </div>
@@ -96,7 +96,7 @@ export function CollectionForm({ payers }: CollectionFormProps) {
                 required
               />
               <p id="amount-help" className="text-sm text-muted-foreground">
-                Enter the NGN amount before fees or payment instructions.
+                Enter the NGN amount each selected payer should settle.
               </p>
               {state.errors?.amount ? (
                 <p

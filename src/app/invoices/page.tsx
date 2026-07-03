@@ -1,8 +1,9 @@
-import { FileText, Search } from "lucide-react";
+import { ExternalLink, FileText, Search } from "lucide-react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -20,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, formatKoboAsNaira } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { requireActiveWorkspace } from "@/server/current-workspace";
 import { listInvoices } from "@/server/invoices";
 
@@ -33,7 +35,12 @@ const invoiceStatuses = [
 ];
 
 type InvoicesPageProps = {
-  searchParams?: Promise<{ q?: string; status?: string }>;
+  searchParams?: Promise<{
+    q?: string;
+    status?: string;
+    collectionId?: string;
+    payerId?: string;
+  }>;
 };
 
 function getStatusLabel(status: string) {
@@ -44,6 +51,14 @@ function getStatusBadgeVariant(status: string) {
   return status === "pending" ? "outline" : "secondary";
 }
 
+function getPositiveNumber(value?: string) {
+  const numberValue = Number(value);
+
+  return Number.isInteger(numberValue) && numberValue > 0
+    ? numberValue
+    : undefined;
+}
+
 export default async function InvoicesPage({
   searchParams,
 }: InvoicesPageProps) {
@@ -51,9 +66,13 @@ export default async function InvoicesPage({
   const resolvedSearchParams = await searchParams;
   const query = resolvedSearchParams?.q ?? "";
   const status = resolvedSearchParams?.status ?? "all";
+  const collectionId = getPositiveNumber(resolvedSearchParams?.collectionId);
+  const payerId = getPositiveNumber(resolvedSearchParams?.payerId);
   const invoiceRows = await listInvoices(workspace.organization.id, {
     query,
     status,
+    collectionId,
+    payerId,
   });
 
   return (
@@ -69,21 +88,21 @@ export default async function InvoicesPage({
           </p>
           <h1 className="mt-1 text-2xl font-semibold md:text-3xl">Invoices</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Track individual obligations generated from active collections.
+            Track each payer-specific invoice generated from your collections.
           </p>
         </header>
 
         <Card>
-          <CardHeader className="gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <CardHeader className="gap-4">
             <div>
               <CardTitle>Invoice register</CardTitle>
               <CardDescription>
-                Search by invoice number, payer, or collection.
+                Filter by invoice number or ID, collection, payer, and status.
               </CardDescription>
             </div>
             <form
               action="/invoices"
-              className="grid w-full gap-2 sm:grid-cols-[1fr_190px] xl:w-[560px]"
+              className="grid w-full gap-2 md:grid-cols-2 xl:grid-cols-[1.4fr_0.7fr_0.7fr_190px]"
             >
               <div className="relative">
                 <Search
@@ -94,9 +113,21 @@ export default async function InvoicesPage({
                   name="q"
                   defaultValue={query}
                   className="pl-9"
-                  placeholder="Search invoices"
+                  placeholder="Invoice number, invoice ID, payer, collection"
                 />
               </div>
+              <Input
+                name="collectionId"
+                defaultValue={resolvedSearchParams?.collectionId ?? ""}
+                inputMode="numeric"
+                placeholder="Collection ID"
+              />
+              <Input
+                name="payerId"
+                defaultValue={resolvedSearchParams?.payerId ?? ""}
+                inputMode="numeric"
+                placeholder="Payer ID"
+              />
               <select
                 name="status"
                 defaultValue={status}
@@ -122,7 +153,7 @@ export default async function InvoicesPage({
                     <TableHead>Collection</TableHead>
                     <TableHead>Due date</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Payment method</TableHead>
+                    <TableHead>Public URL</TableHead>
                     <TableHead className="text-right">Amount due</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -130,14 +161,26 @@ export default async function InvoicesPage({
                   {invoiceRows.map((invoice) => (
                     <TableRow key={invoice.id}>
                       <TableCell className="font-medium">
+                        <div className="flex flex-col gap-1">
+                          <Link
+                            href={`/invoices/${invoice.id}`}
+                            className="hover:underline"
+                          >
+                            {invoice.invoiceNumber}
+                          </Link>
+                          <span className="text-xs text-muted-foreground">
+                            ID {invoice.id}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Link
-                          href={`/invoices/${invoice.id}`}
+                          href={`/payers/${invoice.payer.id}`}
                           className="hover:underline"
                         >
-                          {invoice.invoiceNumber}
+                          {invoice.payer.fullName}
                         </Link>
                       </TableCell>
-                      <TableCell>{invoice.payer.fullName}</TableCell>
                       <TableCell>
                         <Link
                           href={`/collections/${invoice.collection.id}`}
@@ -152,8 +195,20 @@ export default async function InvoicesPage({
                           {getStatusLabel(invoice.status)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        Not generated
+                      <TableCell>
+                        <Link
+                          href={`/invoice/${invoice.publicToken}`}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                          )}
+                          target="_blank"
+                        >
+                          Open
+                          <ExternalLink
+                            aria-hidden="true"
+                            data-icon="inline-end"
+                          />
+                        </Link>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatKoboAsNaira(invoice.amountDueKobo)}
@@ -169,8 +224,8 @@ export default async function InvoicesPage({
                 </div>
                 <h2 className="mt-4 text-lg font-semibold">No invoices yet</h2>
                 <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-                  Generate invoices from a draft collection to create individual
-                  payer obligations.
+                  Open a collection, select one or more assigned payers, and
+                  send invoice links to generate payer-specific invoices.
                 </p>
               </div>
             )}

@@ -2,6 +2,8 @@ export type InvoiceNumberInput = {
   organizationName: string;
   year: string | number;
   serial: string | number;
+  payerName?: string | null;
+  payerExternalId?: string | null;
 };
 
 export function getOrganizationInvoiceCode(organizationName: string) {
@@ -20,14 +22,48 @@ export function getOrganizationInvoiceCode(organizationName: string) {
     : normalizedCode;
 }
 
+export function getPayerInvoiceCode(input: {
+  payerName?: string | null;
+  payerExternalId?: string | null;
+}) {
+  if (input.payerExternalId?.trim()) {
+    const externalCode = input.payerExternalId
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "")
+      .slice(0, 8);
+
+    if (externalCode) {
+      return externalCode;
+    }
+  }
+
+  const words = (input.payerName ?? "")
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return "PAY";
+  }
+
+  if (words.length === 1) {
+    return words[0].slice(0, 8);
+  }
+
+  return `${words[0][0]}${words[words.length - 1]}`.slice(0, 8);
+}
+
 export function formatInvoiceNumber({
   organizationName,
   year,
   serial,
+  payerName,
+  payerExternalId,
 }: InvoiceNumberInput) {
   const organizationCode = getOrganizationInvoiceCode(organizationName);
+  const payerCode = getPayerInvoiceCode({ payerName, payerExternalId });
   const normalizedYear = String(year).slice(0, 4);
   const normalizedSerial = String(serial).padStart(6, "0");
 
-  return `SHQ-${organizationCode}-INV-${normalizedYear}-${normalizedSerial}`;
+  return `SHQ-${organizationCode}-${payerCode}-INV-${normalizedYear}-${normalizedSerial}`;
 }

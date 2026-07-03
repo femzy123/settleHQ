@@ -1,4 +1,4 @@
-import { ArrowLeft, CreditCard, Landmark, ReceiptText } from "lucide-react";
+import { ArrowLeft, ExternalLink, ReceiptText } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -12,9 +12,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { buttonVariants } from "@/components/ui/button";
+import { runtimeEnv } from "@/lib/env";
+import { cn } from "@/lib/utils";
 import { formatDate, formatKoboAsNaira } from "@/lib/money";
 import { requireActiveWorkspace } from "@/server/current-workspace";
-import { getInvoiceForOrganization } from "@/server/invoices";
+import {
+  getActiveCheckoutForInvoice,
+  getInvoiceForOrganization,
+  listReceiptsForInvoice,
+} from "@/server/invoices";
 
 type InvoiceDetailPageProps = {
   params: Promise<{ invoiceId: string }>;
@@ -44,10 +51,18 @@ export default async function InvoiceDetailPage({
     notFound();
   }
 
+  const [checkout, receiptRows] = await Promise.all([
+    getActiveCheckoutForInvoice(workspace.organization.id, invoice.id),
+    listReceiptsForInvoice(workspace.organization.id, invoice.id),
+  ]);
   const outstandingKobo = Math.max(
     invoice.amountDueKobo - invoice.amountPaidKobo,
     0,
   );
+  const publicPath = `/invoice/${invoice.publicToken}`;
+  const publicUrl = runtimeEnv.appUrl
+    ? `${runtimeEnv.appUrl.replace(/\/$/, "")}${publicPath}`
+    : publicPath;
 
   return (
     <AppShell
@@ -71,7 +86,8 @@ export default async function InvoiceDetailPage({
             <Badge variant="outline">{getStatusLabel(invoice.status)}</Badge>
           </div>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Invoice for {invoice.payer.fullName} from {invoice.collection.name}.
+            Specific invoice for {invoice.payer.fullName} from{" "}
+            {invoice.collection.name}.
           </p>
         </header>
 
@@ -145,36 +161,45 @@ export default async function InvoiceDetailPage({
 
           <div className="grid gap-5">
             <Card>
-              <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
+              <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle>Payment method</CardTitle>
+                  <CardTitle>Public invoice URL</CardTitle>
                   <CardDescription>
-                    Nomba payment options will be attached to this invoice next.
+                    Share this page with the payer. The Pay button lives there,
+                    not in the internal dashboard.
                   </CardDescription>
                 </div>
-                <CreditCard aria-hidden="true" className="text-accent" />
+                <Link
+                  href={publicPath}
+                  className={cn(buttonVariants({ variant: "outline" }))}
+                  target="_blank"
+                >
+                  Open page
+                  <ExternalLink aria-hidden="true" data-icon="inline-end" />
+                </Link>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-border bg-muted/35 p-4">
-                    <div className="flex items-center gap-2 font-medium">
-                      <Landmark aria-hidden="true" />
-                      Bank transfer
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Temporary virtual account details will appear here after
-                      Nomba payment options are enabled.
+                    <p className="text-sm text-muted-foreground">Public URL</p>
+                    <p className="mt-2 break-all text-sm font-medium">
+                      {publicUrl}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border bg-muted/35 p-4">
-                    <div className="flex items-center gap-2 font-medium">
-                      <CreditCard aria-hidden="true" />
-                      Checkout
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Card, transfer, USSD, or QR checkout instructions will be
-                      added in the payment option milestone.
+                    <p className="text-sm text-muted-foreground">
+                      Checkout status
                     </p>
+                    <p className="mt-2 font-medium">
+                      {checkout?.checkoutUrl
+                        ? "Checkout ready"
+                        : "Not opened yet"}
+                    </p>
+                    {checkout?.orderReference ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Reference: {checkout.orderReference}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </CardContent>
@@ -183,17 +208,49 @@ export default async function InvoiceDetailPage({
             <Card>
               <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle>Receipt</CardTitle>
+                  <CardTitle>Receipts</CardTitle>
                   <CardDescription>
-                    Receipts are issued after a verified payment is reconciled.
+                    Receipts related to this invoice after verified payments.
                   </CardDescription>
                 </div>
                 <ReceiptText aria-hidden="true" className="text-accent" />
               </CardHeader>
               <CardContent>
-                <div className="rounded-lg border border-dashed border-border bg-muted/35 p-6 text-sm text-muted-foreground">
-                  No receipt has been issued for this invoice yet.
-                </div>
+                {receiptRows.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {receiptRows.map((receipt) => (
+                      <div
+                        key={receipt.id}
+                        className="rounded-lg border border-border p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium">
+                              {receipt.receiptNumber}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Paid {formatDate(receipt.payment.paidAt)} via{" "}
+                              {receipt.payment.paymentMethod.replaceAll(
+                                "_",
+                                " ",
+                              )}
+                            </p>
+                          </div>
+                          <p className="font-semibold tabular-nums">
+                            {formatKoboAsNaira(
+                              receipt.amountKobo,
+                              receipt.currency,
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/35 p-6 text-sm text-muted-foreground">
+                    No receipt has been issued for this invoice yet.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -124,7 +124,8 @@ describe("createOrReuseCheckoutForPublicInvoice", () => {
         customerId: "42",
         customerEmail: "payer@example.com",
         amountKobo: 250_000,
-        callbackUrl: "https://settlehq.test/invoice/public-token",
+        callbackUrl:
+          "https://settlehq.test/invoice/public-token?checkout_return=1",
         metadata: expect.objectContaining({
           invoiceId: "12",
           payerId: "42",

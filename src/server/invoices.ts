@@ -12,7 +12,11 @@ import {
   receipts,
 } from "@/db/schema";
 import { formatInvoiceNumber } from "@/lib/invoices";
-import { createNombaCheckoutOrder } from "@/server/nomba";
+import {
+  createNombaCheckoutOrder,
+  fetchNombaCheckoutTransaction,
+} from "@/server/nomba";
+import { processNombaCheckoutTransactionLookup } from "@/server/payments";
 
 export class InvoiceError extends Error {
   constructor(message: string) {
@@ -381,6 +385,44 @@ export async function listReceiptsForInvoice(
   }));
 }
 
+export async function syncCheckoutPaymentForPublicInvoice(
+  publicToken: string,
+  db = getDb(),
+) {
+  const invoice = await getPublicInvoiceByToken(publicToken, db);
+
+  if (!invoice || ["paid", "cancelled"].includes(invoice.status)) {
+    return { processed: false, reason: "Invoice is not payable" };
+  }
+
+  const checkout = await getActiveCheckoutForInvoice(
+    invoice.organizationId,
+    invoice.id,
+    db,
+  );
+
+  if (!checkout?.orderReference) {
+    return { processed: false, reason: "No Checkout order exists" };
+  }
+
+  try {
+    const transaction = await fetchNombaCheckoutTransaction(
+      checkout.orderReference,
+    );
+
+    if (!transaction || typeof transaction !== "object") {
+      return { processed: false, reason: "Checkout lookup returned no data" };
+    }
+
+    return processNombaCheckoutTransactionLookup(
+      checkout.orderReference,
+      transaction as Record<string, unknown>,
+      db,
+    );
+  } catch {
+    return { processed: false, reason: "Checkout lookup failed" };
+  }
+}
 export async function createOrReuseCheckoutForPublicInvoice(
   publicToken: string,
   options: {
@@ -431,7 +473,9 @@ export async function createOrReuseCheckoutForPublicInvoice(
   }
 
   const appUrl = options.appUrl.replace(/\/$/, "");
-  const callbackUrl = `${appUrl}${getPublicInvoicePath(invoice.publicToken)}`;
+  const callbackUrl = `${appUrl}${getPublicInvoicePath(
+    invoice.publicToken,
+  )}?checkout_return=1`;
   const orderReference = invoice.invoiceNumber;
   const checkout = await checkoutClient({
     orderReference,
@@ -473,7 +517,6 @@ export async function createOrReuseCheckoutForPublicInvoice(
 
   return checkout.checkoutLink;
 }
-
 export async function sendInvoicesForSelectedPayers(
   organizationId: number,
   organizationName: string,

@@ -26,10 +26,16 @@ import {
 } from "@/server/invoices";
 
 import { payInvoiceAction } from "./actions";
+import { PaymentVerificationModal } from "./payment-verification-modal";
 
 type PublicInvoicePageProps = {
   params: Promise<{ token: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
+
+function getQueryValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function getStatusLabel(status: string) {
   return status.replaceAll("_", " ");
@@ -45,8 +51,10 @@ function getStatusVariant(status: string) {
 
 export default async function PublicInvoicePage({
   params,
+  searchParams,
 }: PublicInvoicePageProps) {
   const { token } = await params;
+  const query = (await searchParams) ?? {};
   const invoice = await getPublicInvoiceByToken(token);
 
   if (!invoice) {
@@ -63,6 +71,10 @@ export default async function PublicInvoicePage({
   );
   const isPayable =
     outstandingKobo > 0 && !["paid", "cancelled"].includes(invoice.status);
+  const shouldVerifyPayment =
+    getQueryValue(query.checkout_return) === "1" && isPayable;
+  const showPendingVerification =
+    getQueryValue(query.payment_pending) === "1" && isPayable;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -130,6 +142,21 @@ export default async function PublicInvoicePage({
                 </div>
               </CardContent>
             </Card>
+
+            {showPendingVerification ? (
+              <Card className="border-accent/45 bg-accent/10">
+                <CardContent className="p-5 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">
+                    Payment verification is still in progress.
+                  </p>
+                  <p className="mt-2 leading-6">
+                    Your payment was submitted. This invoice will be marked as
+                    paid and the receipt will appear once confirmation is
+                    completed.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card>
               <CardHeader>
@@ -231,6 +258,10 @@ export default async function PublicInvoicePage({
           </aside>
         </section>
       </div>
+
+      {shouldVerifyPayment ? (
+        <PaymentVerificationModal publicToken={token} />
+      ) : null}
     </main>
   );
 }

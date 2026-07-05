@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { canUseDb, getDb } from "@/db";
 import { webhookEvents } from "@/db/schema";
+import { processVerifiedNombaWebhook } from "@/server/payments";
 import {
   verifyNombaWebhookSignature,
   type NombaWebhookPayload,
@@ -115,16 +116,23 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [storedEvent] = await getDb()
+    const db = getDb();
+    const [storedEvent] = await db
       .insert(webhookEvents)
       .values(event)
       .returning({ id: webhookEvents.id });
+    const processing = await processVerifiedNombaWebhook(
+      storedEvent.id,
+      payload,
+      db,
+    );
 
     return NextResponse.json({
       ok: true,
       stored: true,
       verified: true,
       id: storedEvent.id,
+      processing,
     });
   } catch (error) {
     if (isDuplicateEventError(error)) {

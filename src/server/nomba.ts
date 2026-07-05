@@ -116,21 +116,18 @@ async function getNombaAccessToken() {
   }
 
   const config = getRequiredNombaConfig();
-  const response = await fetch(
-    `${config.baseUrl}/auth/token/issue`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        accountId: config.parentAccountId,
-      },
-      body: JSON.stringify({
-        grant_type: "client_credentials",
-        client_id: config.clientId,
-        client_secret: config.privateKey,
-      }),
+  const response = await fetch(`${config.baseUrl}/auth/token/issue`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      accountId: config.parentAccountId,
     },
-  );
+    body: JSON.stringify({
+      grant_type: "client_credentials",
+      client_id: config.clientId,
+      client_secret: config.privateKey,
+    }),
+  });
   const body = await parseResponse(response);
 
   if (!response.ok) {
@@ -208,4 +205,32 @@ export async function createNombaCheckoutOrder(
     orderReference: checkout.orderReference ?? input.orderReference,
     rawResponse: body,
   };
+}
+
+export async function fetchNombaCheckoutTransaction(orderReference: string) {
+  const config = getRequiredNombaConfig();
+  const accessToken = await getNombaAccessToken();
+  const url = new URL(`${config.baseUrl}/checkout/transaction`);
+
+  url.searchParams.set("idType", "ORDER_REFERENCE");
+  url.searchParams.set("id", orderReference);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      accountId: config.parentAccountId,
+    },
+  });
+  const body = await parseResponse(response);
+
+  if (!response.ok) {
+    throw new NombaApiError(
+      "Nomba checkout transaction fetch failed.",
+      response.status,
+      body,
+    );
+  }
+
+  return body;
 }

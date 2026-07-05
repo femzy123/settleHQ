@@ -102,6 +102,19 @@ function getPublicInvoicePath(publicToken: string) {
   return `/invoice/${publicToken}`;
 }
 
+function getCheckoutCallbackUrl(appUrl: string, publicToken: string) {
+  const normalizedAppUrl = appUrl.replace(/\/+$/, "");
+
+  return `${normalizedAppUrl}${getPublicInvoicePath(publicToken)}?checkout_return=1`;
+}
+
+function createCheckoutAttemptReference(
+  invoiceNumber: string,
+  now = new Date(),
+) {
+  return `${invoiceNumber}-CHK-${now.getTime().toString(36).toUpperCase()}`;
+}
+
 function normalizePayerIds(payerIds: number[]) {
   return [...new Set(payerIds)].filter(
     (payerId) => Number.isInteger(payerId) && payerId > 0,
@@ -462,21 +475,37 @@ export async function createOrReuseCheckoutForPublicInvoice(
     throw new CheckoutError("This invoice has no outstanding balance.");
   }
 
+  const callbackUrl = getCheckoutCallbackUrl(
+    options.appUrl,
+    invoice.publicToken,
+  );
   const existingCheckout = await getActiveCheckoutForInvoice(
     invoice.organizationId,
     invoice.id,
     db,
   );
 
-  if (existingCheckout?.checkoutUrl) {
+  if (
+    existingCheckout?.checkoutUrl &&
+    existingCheckout.callbackUrl === callbackUrl
+  ) {
     return existingCheckout.checkoutUrl;
   }
 
-  const appUrl = options.appUrl.replace(/\/$/, "");
-  const callbackUrl = `${appUrl}${getPublicInvoicePath(
-    invoice.publicToken,
-  )}?checkout_return=1`;
-  const orderReference = invoice.invoiceNumber;
+  if (existingCheckout) {
+    await db
+      .update(invoicePaymentOptions)
+      .set({
+        status: "inactive",
+        checkoutStatus: "expired",
+        updatedAt: new Date(),
+      })
+      .where(eq(invoicePaymentOptions.id, existingCheckout.id));
+  }
+
+  const orderReference = existingCheckout
+    ? createCheckoutAttemptReference(invoice.invoiceNumber)
+    : invoice.invoiceNumber;
   const checkout = await checkoutClient({
     orderReference,
     customerId: String(invoice.payer.id),

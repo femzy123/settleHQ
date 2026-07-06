@@ -74,6 +74,10 @@ export function PaymentVerificationModal({
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
+    startedAtRef.current = Date.now();
+    fallbackStartedRef.current = false;
+    finishedRef.current = false;
+
     function finishAsPaid() {
       if (cancelled || finishedRef.current) {
         return;

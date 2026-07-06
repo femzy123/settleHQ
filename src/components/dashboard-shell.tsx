@@ -1,48 +1,46 @@
 import { ArrowUpRight, Banknote, Clock3 } from "lucide-react";
+import Link from "next/link";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { buttonVariants } from "@/components/ui/button";
+import { formatKoboAsNaira } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
-const metrics = [
-  {
-    label: "Outstanding Collections",
-    value: "NGN 4.2m",
-    helper: "Across 128 open invoices",
-  },
-  { label: "Collection Rate", value: "82%", helper: "18% left to collect" },
-  { label: "Invoices Due Today", value: "14", helper: "6 require follow-up" },
-  { label: "Recent Payments", value: "NGN 230k", helper: "Received today" },
-];
+export type DashboardMetric = {
+  label: string;
+  value: string;
+  helper: string;
+};
 
-const activity = [
-  {
-    title: "Invoice INV-1042 paid",
-    detail: "Amina Yusuf completed school fees",
-    time: "8 min ago",
-  },
-  {
-    title: "Transfer matched",
-    detail: "Payment matched to an invoice",
-    time: "18 min ago",
-  },
-  {
-    title: "Collection published",
-    detail: "Term 2 fees sent to 86 payers",
-    time: "42 min ago",
-  },
-];
+export type DashboardOutstandingCollection = {
+  id: number;
+  name: string;
+  outstandingKobo: number;
+  openInvoiceCount: number;
+  collectionRate: number;
+};
 
-const reconciliation = [
-  { label: "Matched Automatically", value: 94, status: "good" },
-  { label: "Underpayments", value: 3, status: "warn" },
-  { label: "Overpayments", value: 1, status: "warn" },
-  { label: "Unknown Payments", value: 2, status: "danger" },
-];
+export type DashboardActivity = {
+  title: string;
+  detail: string;
+  time: string;
+};
+
+export type DashboardReconciliationItem = {
+  label: string;
+  value: number;
+  status: "good" | "warn" | "danger";
+};
 
 type DashboardShellProps = {
   organizationName: string;
   organizationTypeLabel: string;
   userEmail: string;
   userName?: string | null;
+  metrics: DashboardMetric[];
+  outstandingCollections: DashboardOutstandingCollection[];
+  activity: DashboardActivity[];
+  reconciliation: DashboardReconciliationItem[];
 };
 
 export function DashboardShell({
@@ -50,6 +48,10 @@ export function DashboardShell({
   organizationTypeLabel,
   userEmail,
   userName,
+  metrics,
+  outstandingCollections,
+  activity,
+  reconciliation,
 }: DashboardShellProps) {
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -71,16 +73,19 @@ export function DashboardShell({
               </h1>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <button className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+              <Link
+                href="/collections/new"
+                className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}
+              >
                 New Collection
-                <ArrowUpRight aria-hidden="true" />
-              </button>
+                <ArrowUpRight aria-hidden="true" data-icon="inline-end" />
+              </Link>
             </div>
           </header>
 
           <div className="grid gap-5 py-6 xl:grid-cols-[1fr_360px]">
             <div className="flex flex-col gap-5">
-              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 {metrics.map((metric) => (
                   <article
                     key={metric.label}
@@ -89,7 +94,7 @@ export function DashboardShell({
                     <p className="text-sm font-medium text-muted-foreground">
                       {metric.label}
                     </p>
-                    <p className="mt-3 text-2xl font-semibold">
+                    <p className="mt-3 text-2xl font-semibold tabular-nums">
                       {metric.value}
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -107,41 +112,49 @@ export function DashboardShell({
                         Outstanding Collections
                       </h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        The finance team starts with who still owes.
+                        Open obligations ranked by unpaid balance.
                       </p>
                     </div>
                     <Banknote aria-hidden="true" className="text-accent" />
                   </div>
 
                   <div className="mt-6 flex flex-col gap-4">
-                    {[
-                      [
-                        "Term 2 School Fees",
-                        "NGN 2.8m",
-                        "64 invoices open",
-                        "72%",
-                      ],
-                      ["PTA Levy", "NGN 760k", "31 invoices open", "58%"],
-                      ["Bus Service", "NGN 640k", "33 invoices open", "86%"],
-                    ].map(([name, amount, open, rate]) => (
-                      <div key={name} className="rounded-lg bg-muted p-4">
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="font-medium">{name}</p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {open}
+                    {outstandingCollections.length > 0 ? (
+                      outstandingCollections.map((collection) => (
+                        <Link
+                          key={collection.id}
+                          href={`/collections/${collection.id}`}
+                          className="rounded-lg bg-muted p-4 transition hover:bg-muted/75"
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="font-medium">{collection.name}</p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {collection.openInvoiceCount} open invoice
+                                {collection.openInvoiceCount === 1 ? "" : "s"}
+                              </p>
+                            </div>
+                            <p className="font-semibold tabular-nums">
+                              {formatKoboAsNaira(collection.outstandingKobo)}
                             </p>
                           </div>
-                          <p className="font-semibold">{amount}</p>
-                        </div>
-                        <div className="mt-3 h-2 rounded-full bg-background">
-                          <div
-                            className="h-2 rounded-full bg-primary"
-                            style={{ width: rate }}
-                          />
-                        </div>
+                          <div className="mt-3 h-2 rounded-full bg-background">
+                            <div
+                              className="h-2 rounded-full bg-primary"
+                              style={{ width: `${collection.collectionRate}%` }}
+                            />
+                          </div>
+                          <p className="mt-2 text-xs font-medium text-muted-foreground">
+                            {collection.collectionRate}% collected
+                          </p>
+                        </Link>
+                      ))
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border bg-muted/35 p-5 text-sm text-muted-foreground">
+                        No outstanding collection yet. Create a collection and
+                        send invoices to start tracking balances.
                       </div>
-                    ))}
+                    )}
                   </div>
                 </article>
 
@@ -152,7 +165,7 @@ export function DashboardShell({
                         Reconciliation Center
                       </h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Confirmed payments land here before receipts are issued.
+                        Payment matching status across verified receipts.
                       </p>
                     </div>
                     <Clock3 aria-hidden="true" className="text-accent" />
@@ -189,20 +202,26 @@ export function DashboardShell({
               <article className="rounded-lg border border-border bg-surface p-5 shadow-[var(--shadow-soft)]">
                 <h2 className="text-lg font-semibold">Latest Activity</h2>
                 <div className="mt-5 flex flex-col gap-4">
-                  {activity.map((item) => (
-                    <div
-                      key={item.title}
-                      className="border-b border-border pb-4 last:border-0 last:pb-0"
-                    >
-                      <p className="font-medium">{item.title}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {item.detail}
-                      </p>
-                      <p className="mt-2 text-xs font-medium text-muted-foreground">
-                        {item.time}
-                      </p>
+                  {activity.length > 0 ? (
+                    activity.map((item) => (
+                      <div
+                        key={`${item.title}-${item.time}`}
+                        className="border-b border-border pb-4 last:border-0 last:pb-0"
+                      >
+                        <p className="font-medium">{item.title}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {item.detail}
+                        </p>
+                        <p className="mt-2 text-xs font-medium text-muted-foreground">
+                          {item.time}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/35 p-5 text-sm text-muted-foreground">
+                      Payment activity will appear here once invoices are paid.
                     </div>
-                  ))}
+                  )}
                 </div>
               </article>
             </aside>

@@ -249,3 +249,40 @@ html[data-theme="dark"] .theme-toggle-moon {
     @apply border-border outline-ring/50;
   }
 }
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  [data-receipt-print-area],
+  [data-receipt-print-area] * {
+    visibility: visible !important;
+  }
+
+  [data-receipt-print-area] {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: 100% !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    padding: 32px !important;
+  }
+
+  [data-receipt-modal-actions] {
+    display: none !important;
+  }
+
+  .receipt-print-document {
+    color-scheme: light !important;
+    --foreground: #111111 !important;
+    --muted-foreground: #4b5563 !important;
+    --surface: #ffffff !important;
+    --muted: #f3f4f6 !important;
+    --border: #d1d5db !important;
+    --primary: #234337 !important;
+  }
+}

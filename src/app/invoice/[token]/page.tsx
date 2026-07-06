@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
+import { ReceiptViewer } from "@/components/receipt-viewer";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,7 @@ function getStatusLabel(status: string) {
 
 function getStatusVariant(status: string) {
   if (status === "paid") {
-    return "secondary";
+    return "default";
   }
 
   return status === "pending" ? "outline" : "secondary";
@@ -65,16 +66,35 @@ export default async function PublicInvoicePage({
     getActiveCheckoutForInvoice(invoice.organizationId, invoice.id),
     listReceiptsForInvoice(invoice.organizationId, invoice.id),
   ]);
+  const latestReceipt = receiptRows[0] ?? null;
   const outstandingKobo = Math.max(
     invoice.amountDueKobo - invoice.amountPaidKobo,
     0,
   );
+  const isPaid = invoice.status === "paid" || outstandingKobo === 0;
   const isPayable =
     outstandingKobo > 0 && !["paid", "cancelled"].includes(invoice.status);
   const shouldVerifyPayment =
     getQueryValue(query.checkout_return) === "1" && isPayable;
   const showPendingVerification =
     getQueryValue(query.payment_pending) === "1" && isPayable;
+  const receiptViewerData = latestReceipt
+    ? {
+        organizationName: invoice.organization.name,
+        receiptNumber: latestReceipt.receiptNumber,
+        invoiceNumber: invoice.invoiceNumber,
+        payerName: invoice.payer.fullName,
+        collectionName: invoice.collection.name,
+        amountLabel: formatKoboAsNaira(
+          latestReceipt.amountKobo,
+          latestReceipt.currency,
+        ),
+        paymentMethod: latestReceipt.payment.paymentMethod.replaceAll("_", " "),
+        paymentReference: latestReceipt.payment.providerReference,
+        paidAtLabel: formatDate(latestReceipt.payment.paidAt),
+        issuedAtLabel: formatDate(latestReceipt.issuedAt),
+      }
+    : null;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -113,12 +133,35 @@ export default async function PublicInvoicePage({
                 </div>
               </CardHeader>
               <CardContent className="grid gap-6 p-5 sm:p-6">
+                {isPaid ? (
+                  <div className="rounded-lg border border-primary/30 bg-primary/10 p-5">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <CheckCircle2
+                        aria-hidden="true"
+                        className="text-primary"
+                      />
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          Payment confirmed
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          This invoice has been settled and a receipt has been
+                          issued.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div>
                   <p className="text-sm text-muted-foreground">
-                    Amount to settle
+                    {isPaid ? "Amount paid" : "Amount to settle"}
                   </p>
                   <p className="mt-2 text-4xl font-semibold tracking-tight tabular-nums">
-                    {formatKoboAsNaira(outstandingKobo, invoice.currency)}
+                    {formatKoboAsNaira(
+                      isPaid ? invoice.amountPaidKobo : outstandingKobo,
+                      invoice.currency,
+                    )}
                   </p>
                 </div>
 
@@ -137,6 +180,33 @@ export default async function PublicInvoicePage({
                     <p className="text-sm text-muted-foreground">Due date</p>
                     <p className="mt-1 font-medium">
                       {formatDate(invoice.dueDate)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-muted/35 p-4">
+                    <p className="text-sm text-muted-foreground">Amount due</p>
+                    <p className="mt-1 font-semibold tabular-nums">
+                      {formatKoboAsNaira(
+                        invoice.amountDueKobo,
+                        invoice.currency,
+                      )}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/35 p-4">
+                    <p className="text-sm text-muted-foreground">Amount paid</p>
+                    <p className="mt-1 font-semibold tabular-nums">
+                      {formatKoboAsNaira(
+                        invoice.amountPaidKobo,
+                        invoice.currency,
+                      )}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/35 p-4">
+                    <p className="text-sm text-muted-foreground">Outstanding</p>
+                    <p className="mt-1 font-semibold tabular-nums">
+                      {formatKoboAsNaira(outstandingKobo, invoice.currency)}
                     </p>
                   </div>
                 </div>
@@ -159,42 +229,46 @@ export default async function PublicInvoicePage({
             ) : null}
 
             <Card>
-              <CardHeader>
-                <CardTitle>Receipts</CardTitle>
-                <CardDescription>
-                  Receipts appear here after verified payment.
-                </CardDescription>
+              <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle>Receipt</CardTitle>
+                  <CardDescription>
+                    Proof of payment for this specific invoice.
+                  </CardDescription>
+                </div>
+                <ReceiptText aria-hidden="true" className="text-accent" />
               </CardHeader>
               <CardContent>
-                {receiptRows.length > 0 ? (
-                  <div className="flex flex-col gap-3">
-                    {receiptRows.map((receipt) => (
-                      <div
-                        key={receipt.id}
-                        className="rounded-lg border border-border p-4"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="font-medium">
-                              {receipt.receiptNumber}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              Paid {formatDate(receipt.payment.paidAt)} via{" "}
-                              {receipt.payment.paymentMethod.replaceAll(
-                                "_",
-                                " ",
-                              )}
-                            </p>
-                          </div>
-                          <p className="font-semibold tabular-nums">
-                            {formatKoboAsNaira(
-                              receipt.amountKobo,
-                              receipt.currency,
-                            )}
-                          </p>
-                        </div>
+                {latestReceipt ? (
+                  <div className="rounded-lg border border-border bg-surface p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Receipt number
+                        </p>
+                        <p className="mt-1 text-lg font-semibold">
+                          {latestReceipt.receiptNumber}
+                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Paid {formatDate(latestReceipt.payment.paidAt)} via{" "}
+                          {latestReceipt.payment.paymentMethod.replaceAll(
+                            "_",
+                            " ",
+                          )}
+                        </p>
                       </div>
-                    ))}
+                      <div className="flex flex-col items-start gap-3 sm:items-end">
+                        <p className="text-xl font-semibold tabular-nums">
+                          {formatKoboAsNaira(
+                            latestReceipt.amountKobo,
+                            latestReceipt.currency,
+                          )}
+                        </p>
+                        {receiptViewerData ? (
+                          <ReceiptViewer receipt={receiptViewerData} />
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-border bg-muted/35 p-6 text-sm text-muted-foreground">
@@ -208,21 +282,31 @@ export default async function PublicInvoicePage({
           <aside className="flex flex-col gap-5">
             <Card>
               <CardHeader>
-                <CardTitle>Pay securely</CardTitle>
+                <CardTitle>
+                  {isPaid ? "Payment complete" : "Pay securely"}
+                </CardTitle>
                 <CardDescription>
-                  Nomba Checkout supports card and bank transfer.
+                  {isPaid
+                    ? "SettleHQ has verified this payment."
+                    : "Nomba Checkout supports card and bank transfer."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <div className="rounded-lg border border-border bg-muted/35 p-4">
                   <div className="flex items-center gap-2 font-medium">
-                    <Clock3 aria-hidden="true" />
-                    Checkout status
+                    {isPaid ? (
+                      <CheckCircle2 aria-hidden="true" />
+                    ) : (
+                      <Clock3 aria-hidden="true" />
+                    )}
+                    {isPaid ? "Receipt status" : "Checkout status"}
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {checkout?.checkoutUrl
-                      ? "A Checkout order is ready for this invoice."
-                      : "A Checkout order will be created for this invoice when you click Pay."}
+                    {isPaid && latestReceipt
+                      ? `Receipt ${latestReceipt.receiptNumber} has been issued.`
+                      : checkout?.checkoutUrl
+                        ? "A Checkout order is ready for this invoice."
+                        : "A Checkout order will be created for this invoice when you click Pay."}
                   </p>
                 </div>
 
@@ -237,7 +321,9 @@ export default async function PublicInvoicePage({
                 ) : (
                   <div className="flex items-center gap-2 rounded-lg border border-border bg-surface p-4 text-sm font-medium">
                     <CheckCircle2 aria-hidden="true" className="text-primary" />
-                    This invoice is not payable.
+                    {isPaid
+                      ? "This invoice has been paid."
+                      : "This invoice is not payable."}
                   </div>
                 )}
 

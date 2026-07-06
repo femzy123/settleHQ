@@ -1,8 +1,14 @@
-import { ArrowLeft, ExternalLink, ReceiptText } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  ReceiptText,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/app-sidebar";
+import { ReceiptViewer } from "@/components/receipt-viewer";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -55,14 +61,33 @@ export default async function InvoiceDetailPage({
     getActiveCheckoutForInvoice(workspace.organization.id, invoice.id),
     listReceiptsForInvoice(workspace.organization.id, invoice.id),
   ]);
+  const latestReceipt = receiptRows[0] ?? null;
   const outstandingKobo = Math.max(
     invoice.amountDueKobo - invoice.amountPaidKobo,
     0,
   );
+  const isPaid = invoice.status === "paid" || outstandingKobo === 0;
   const publicPath = `/invoice/${invoice.publicToken}`;
   const publicUrl = runtimeEnv.appUrl
     ? `${runtimeEnv.appUrl.replace(/\/$/, "")}${publicPath}`
     : publicPath;
+  const receiptViewerData = latestReceipt
+    ? {
+        organizationName: workspace.organization.name,
+        receiptNumber: latestReceipt.receiptNumber,
+        invoiceNumber: invoice.invoiceNumber,
+        payerName: invoice.payer.fullName,
+        collectionName: invoice.collection.name,
+        amountLabel: formatKoboAsNaira(
+          latestReceipt.amountKobo,
+          latestReceipt.currency,
+        ),
+        paymentMethod: latestReceipt.payment.paymentMethod.replaceAll("_", " "),
+        paymentReference: latestReceipt.payment.providerReference,
+        paidAtLabel: formatDate(latestReceipt.payment.paidAt),
+        issuedAtLabel: formatDate(latestReceipt.issuedAt),
+      }
+    : null;
 
   return (
     <AppShell
@@ -83,13 +108,41 @@ export default async function InvoiceDetailPage({
             <h1 className="text-2xl font-semibold md:text-3xl">
               {invoice.invoiceNumber}
             </h1>
-            <Badge variant="outline">{getStatusLabel(invoice.status)}</Badge>
+            <Badge variant={isPaid ? "default" : "outline"}>
+              {getStatusLabel(invoice.status)}
+            </Badge>
           </div>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Specific invoice for {invoice.payer.fullName} from{" "}
             {invoice.collection.name}.
           </p>
         </header>
+
+        {isPaid ? (
+          <Card className="border-primary/35 bg-primary/10">
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="mt-0.5 text-primary"
+                />
+                <div>
+                  <p className="font-semibold text-foreground">
+                    Payment verified
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {latestReceipt
+                      ? `Receipt ${latestReceipt.receiptNumber} has been issued for this invoice.`
+                      : "This invoice is paid. Receipt details will appear once issued."}
+                  </p>
+                </div>
+              </div>
+              <p className="text-2xl font-semibold tabular-nums">
+                {formatKoboAsNaira(invoice.amountPaidKobo, invoice.currency)}
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <section className="grid gap-4 md:grid-cols-3">
           {[
@@ -191,9 +244,11 @@ export default async function InvoiceDetailPage({
                       Checkout status
                     </p>
                     <p className="mt-2 font-medium">
-                      {checkout?.checkoutUrl
-                        ? "Checkout ready"
-                        : "Not opened yet"}
+                      {isPaid
+                        ? "Payment verified"
+                        : checkout?.checkoutUrl
+                          ? "Checkout ready"
+                          : "Not opened yet"}
                     </p>
                     {checkout?.orderReference ? (
                       <p className="mt-1 text-xs text-muted-foreground">
@@ -208,43 +263,44 @@ export default async function InvoiceDetailPage({
             <Card>
               <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle>Receipts</CardTitle>
+                  <CardTitle>Receipt</CardTitle>
                   <CardDescription>
-                    Receipts related to this invoice after verified payments.
+                    Verified receipt linked to this invoice payment.
                   </CardDescription>
                 </div>
                 <ReceiptText aria-hidden="true" className="text-accent" />
               </CardHeader>
               <CardContent>
-                {receiptRows.length > 0 ? (
-                  <div className="flex flex-col gap-3">
-                    {receiptRows.map((receipt) => (
-                      <div
-                        key={receipt.id}
-                        className="rounded-lg border border-border p-4"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="font-medium">
-                              {receipt.receiptNumber}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              Paid {formatDate(receipt.payment.paidAt)} via{" "}
-                              {receipt.payment.paymentMethod.replaceAll(
-                                "_",
-                                " ",
-                              )}
-                            </p>
-                          </div>
-                          <p className="font-semibold tabular-nums">
-                            {formatKoboAsNaira(
-                              receipt.amountKobo,
-                              receipt.currency,
-                            )}
-                          </p>
-                        </div>
+                {latestReceipt ? (
+                  <div className="rounded-lg border border-border bg-surface p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Receipt number
+                        </p>
+                        <p className="mt-1 text-lg font-semibold">
+                          {latestReceipt.receiptNumber}
+                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Paid {formatDate(latestReceipt.payment.paidAt)} via{" "}
+                          {latestReceipt.payment.paymentMethod.replaceAll(
+                            "_",
+                            " ",
+                          )}
+                        </p>
                       </div>
-                    ))}
+                      <div className="flex flex-col items-start gap-3 sm:items-end">
+                        <p className="text-xl font-semibold tabular-nums">
+                          {formatKoboAsNaira(
+                            latestReceipt.amountKobo,
+                            latestReceipt.currency,
+                          )}
+                        </p>
+                        {receiptViewerData ? (
+                          <ReceiptViewer receipt={receiptViewerData} />
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-border bg-muted/35 p-6 text-sm text-muted-foreground">

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatDate, formatKoboAsNaira } from "@/lib/money";
+import { formatPaymentMethodLabel } from "@/server/payment-records";
 import {
   getActiveCheckoutForInvoice,
   getPublicInvoiceByToken,
@@ -89,7 +90,9 @@ export default async function PublicInvoicePage({
           latestReceipt.amountKobo,
           latestReceipt.currency,
         ),
-        paymentMethod: latestReceipt.payment.paymentMethod.replaceAll("_", " "),
+        paymentMethod: formatPaymentMethodLabel(
+          latestReceipt.payment.paymentMethod,
+        ),
         paymentReference: latestReceipt.payment.providerReference,
         paidAtLabel: formatDate(latestReceipt.payment.paidAt),
         issuedAtLabel: formatDate(latestReceipt.issuedAt),
@@ -251,9 +254,8 @@ export default async function PublicInvoicePage({
                         </p>
                         <p className="mt-2 text-sm text-muted-foreground">
                           Paid {formatDate(latestReceipt.payment.paidAt)} via{" "}
-                          {latestReceipt.payment.paymentMethod.replaceAll(
-                            "_",
-                            " ",
+                          {formatPaymentMethodLabel(
+                            latestReceipt.payment.paymentMethod,
                           )}
                         </p>
                       </div>

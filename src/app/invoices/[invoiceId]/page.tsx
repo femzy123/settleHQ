@@ -22,6 +22,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { runtimeEnv } from "@/lib/env";
 import { cn } from "@/lib/utils";
 import { formatDate, formatKoboAsNaira } from "@/lib/money";
+import { formatPaymentMethodLabel } from "@/server/payment-records";
 import { requireActiveWorkspace } from "@/server/current-workspace";
 import {
   getActiveCheckoutForInvoice,
@@ -82,7 +83,9 @@ export default async function InvoiceDetailPage({
           latestReceipt.amountKobo,
           latestReceipt.currency,
         ),
-        paymentMethod: latestReceipt.payment.paymentMethod.replaceAll("_", " "),
+        paymentMethod: formatPaymentMethodLabel(
+          latestReceipt.payment.paymentMethod,
+        ),
         paymentReference: latestReceipt.payment.providerReference,
         paidAtLabel: formatDate(latestReceipt.payment.paidAt),
         issuedAtLabel: formatDate(latestReceipt.issuedAt),
@@ -283,9 +286,8 @@ export default async function InvoiceDetailPage({
                         </p>
                         <p className="mt-2 text-sm text-muted-foreground">
                           Paid {formatDate(latestReceipt.payment.paidAt)} via{" "}
-                          {latestReceipt.payment.paymentMethod.replaceAll(
-                            "_",
-                            " ",
+                          {formatPaymentMethodLabel(
+                            latestReceipt.payment.paymentMethod,
                           )}
                         </p>
                       </div>

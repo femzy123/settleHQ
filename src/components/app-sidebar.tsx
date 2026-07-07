@@ -34,7 +34,7 @@ const navItems: Array<{
   { label: "Collections", href: "/collections", icon: ListChecks },
   { label: "Payers", href: "/payers", icon: UsersRound },
   { label: "Invoices", href: "/invoices", icon: FileText },
-  { label: "Payments", icon: WalletCards },
+  { label: "Payments", href: "/payments", icon: WalletCards },
   { label: "Reports", icon: ReceiptText },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

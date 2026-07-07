@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
+import { formatPaymentMethodLabel } from "@/server/payment-records";
 import {
   collections,
   invoices,
@@ -316,7 +317,7 @@ export async function getDashboardData(
     ],
     activity: activityRows.map((row) => ({
       title: `${row.invoiceNumber} paid`,
-      detail: `${row.payerName} paid ${formatCompactNaira(row.amountKobo)} via ${row.paymentMethod.replaceAll("_", " ")}`,
+      detail: `${row.payerName} paid ${formatCompactNaira(row.amountKobo)} via ${formatPaymentMethodLabel(row.paymentMethod)}`,
       time: formatActivityTime(row.paidAt),
     })),
   };

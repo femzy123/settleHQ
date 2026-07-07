@@ -75,6 +75,7 @@ export async function getOrCreatePayerVirtualAccount(input: {
   payerId: number;
   db?: Db;
   client?: VirtualAccountClient;
+  lookupClient?: VirtualAccountLookupClient;
 }) {
   const db = input.db ?? getDb();
   const accountRef = buildPayerAccountRef(input.organizationId, input.payerId);

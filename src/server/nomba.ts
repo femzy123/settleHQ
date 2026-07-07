@@ -1,4 +1,5 @@
 import { runtimeEnv } from "@/lib/env";
+import { normalizeNombaVirtualAccountResponse } from "@/lib/nomba-virtual-account";
 import {
   buildCheckoutOrderPayload,
   getCheckoutLinkFromResponse,
@@ -108,6 +109,24 @@ async function parseResponse(response: Response) {
   }
 }
 
+
+function isNombaSuccessBody(body: unknown) {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+
+  const payload = body as {
+    code?: unknown;
+    status?: unknown;
+    description?: unknown;
+  };
+
+  return (
+    payload.status === true ||
+    payload.code === "00" ||
+    String(payload.description ?? "").toUpperCase() === "SUCCESS"
+  );
+}
 async function getNombaAccessToken() {
   const now = Date.now();
 
@@ -233,4 +252,160 @@ export async function fetchNombaCheckoutTransaction(orderReference: string) {
   }
 
   return body;
+}
+
+export type CreateNombaVirtualAccountInput = {
+  accountRef: string;
+  accountName: string;
+};
+
+export async function createNombaVirtualAccount(
+  input: CreateNombaVirtualAccountInput,
+) {
+  const config = getRequiredNombaConfig();
+  const accessToken = await getNombaAccessToken();
+  const payload = {
+    accountRef: input.accountRef,
+    accountName: input.accountName,
+  };
+
+  console.info("[SettleHQ Nomba] creating virtual account request", {
+    endpoint: `${config.baseUrl}/accounts/virtual/[subAccountId]`,
+    accountRef: payload.accountRef,
+    accountName: payload.accountName,
+    parentAccountHeaderPresent: Boolean(config.parentAccountId),
+    subAccountIdPresent: Boolean(config.subAccountId),
+  });
+
+  const response = await fetch(
+    `${config.baseUrl}/accounts/virtual/${config.subAccountId}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        accountId: config.parentAccountId,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  const body = await parseResponse(response);
+
+  console.info("[SettleHQ Nomba] create virtual account response", {
+    status: response.status,
+    ok: response.ok,
+    accountRef: payload.accountRef,
+    body,
+  });
+
+  if (!response.ok || !isNombaSuccessBody(body)) {
+    throw new NombaApiError(
+      "Nomba virtual account creation failed.",
+      response.status,
+      body,
+    );
+  }
+
+  const normalized = normalizeNombaVirtualAccountResponse(
+    (body && typeof body === "object" ? body : { body }) as Record<
+      string,
+      unknown
+    >,
+  );
+
+  console.info("[SettleHQ Nomba] normalized virtual account response", {
+    accountRef: normalized.accountRef,
+    accountNumber: normalized.accountNumber,
+    accountName: normalized.accountName,
+    bankName: normalized.bankName,
+    providerVirtualAccountId: normalized.providerVirtualAccountId,
+  });
+
+  return normalized;
+}
+
+export async function fetchNombaVirtualAccountTransactions(
+  virtualAccountNumber: string,
+) {
+  const config = getRequiredNombaConfig();
+  const accessToken = await getNombaAccessToken();
+  const url = new URL(`${config.baseUrl}/transactions/virtual`);
+
+  url.searchParams.set("virtual_account", virtualAccountNumber);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      accountId: config.parentAccountId,
+    },
+  });
+  const body = await parseResponse(response);
+
+  if (!response.ok) {
+    throw new NombaApiError(
+      "Nomba virtual account transactions fetch failed.",
+      response.status,
+      body,
+    );
+  }
+
+  return body;
+}
+function getFirstVirtualAccountResult(body: unknown) {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  const payload = body as {
+    data?: { results?: unknown };
+  };
+  const results = payload.data?.results;
+
+  if (!Array.isArray(results) || results.length === 0) {
+    return null;
+  }
+
+  const [first] = results;
+  return first && typeof first === "object"
+    ? (first as Record<string, unknown>)
+    : null;
+}
+
+export async function findNombaVirtualAccountByRef(accountRef: string) {
+  const config = getRequiredNombaConfig();
+  const accessToken = await getNombaAccessToken();
+  const response = await fetch(`${config.baseUrl}/accounts/virtual/list`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      accountId: config.parentAccountId,
+    },
+    body: JSON.stringify({ accountRef }),
+  });
+  const body = await parseResponse(response);
+
+  console.info("[SettleHQ Nomba] filter virtual account response", {
+    status: response.status,
+    ok: response.ok,
+    accountRef,
+    body,
+  });
+
+  if (!response.ok || !isNombaSuccessBody(body)) {
+    throw new NombaApiError(
+      "Nomba virtual account lookup failed.",
+      response.status,
+      body,
+    );
+  }
+
+  const result = getFirstVirtualAccountResult(body);
+
+  if (!result) {
+    return null;
+  }
+
+  return normalizeNombaVirtualAccountResponse(result);
 }

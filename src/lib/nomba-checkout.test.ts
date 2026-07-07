@@ -48,7 +48,7 @@ describe("nomba checkout helpers", () => {
         amount: 2500,
         currency: "NGN",
         accountId: "sub-account-id",
-        allowedPaymentMethods: ["Card", "Transfer"],
+        allowedPaymentMethods: ["Card"],
         orderMetaData: {
           invoiceId: "12",
           organizationId: "7",

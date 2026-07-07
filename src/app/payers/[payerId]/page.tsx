@@ -200,7 +200,43 @@ export default async function PayerDetailPage({
                     {payer.externalId || "Not provided"}
                   </dd>
                 </div>
-                <Separator />
+              <Separator />
+              <div>
+                <dt className="text-sm text-muted-foreground">
+                  Payment account
+                </dt>
+                <dd className="mt-2 rounded-lg border border-border bg-muted/35 p-4">
+                  {payerData.virtualAccount?.status === "active" ? (
+                    <div className="space-y-2">
+                      <Badge variant="default">Active</Badge>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          {payerData.virtualAccount.bankName || "Bank"}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold tabular-nums">
+                          {payerData.virtualAccount.accountNumber}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {payerData.virtualAccount.accountName || payer.fullName}
+                        </p>
+                      </div>
+                    </div>
+                  ) : payerData.virtualAccount ? (
+                    <div className="space-y-2">
+                      <Badge variant="secondary">
+                        {getStatusLabel(payerData.virtualAccount.status)}
+                      </Badge>
+                      <p className="text-sm text-muted-foreground">
+                        A dedicated payment account will be prepared when this payer opens an invoice.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No dedicated payment account has been created yet.
+                    </p>
+                  )}
+                </dd>
+              </div>                <Separator />
                 <div>
                   <dt className="text-sm text-muted-foreground">Created</dt>
                   <dd className="mt-1 font-medium">

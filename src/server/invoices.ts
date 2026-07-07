@@ -17,6 +17,7 @@ import {
   fetchNombaCheckoutTransaction,
 } from "@/server/nomba";
 import { processNombaCheckoutTransactionLookup } from "@/server/payments";
+import { getOrCreatePayerVirtualAccount } from "@/server/virtual-accounts";
 
 export class InvoiceError extends Error {
   constructor(message: string) {
@@ -435,6 +436,86 @@ export async function syncCheckoutPaymentForPublicInvoice(
   } catch {
     return { processed: false, reason: "Checkout lookup failed" };
   }
+}
+
+export async function getOrCreatePublicInvoiceVirtualAccount(
+  publicToken: string,
+  db = getDb(),
+) {
+  console.info("[SettleHQ VA] public invoice VA lookup started", {
+    publicToken,
+  });
+
+  const invoice = await getPublicInvoiceByToken(publicToken, db);
+
+  if (!invoice) {
+    console.warn("[SettleHQ VA] public invoice not found for VA lookup", {
+      publicToken,
+    });
+    return null;
+  }
+
+  if (["paid", "cancelled"].includes(invoice.status)) {
+    return null;
+  }
+
+  const account = await getOrCreatePayerVirtualAccount({
+    organizationId: invoice.organizationId,
+    organizationName: invoice.organization.name,
+    payerId: invoice.payerId,
+    db,
+  });
+
+  console.info("[SettleHQ VA] public invoice VA lookup result", {
+    publicToken,
+    invoiceId: invoice.id,
+    payerId: invoice.payerId,
+    status: account.status,
+    accountRef: account.accountRef,
+    accountNumber: account.accountNumber,
+    bankName: account.bankName,
+  });
+
+  if (account.status !== "active") {
+    return account;
+  }
+
+  const [existingOption] = await db
+    .select()
+    .from(invoicePaymentOptions)
+    .where(
+      and(
+        eq(invoicePaymentOptions.organizationId, invoice.organizationId),
+        eq(invoicePaymentOptions.invoiceId, invoice.id),
+        eq(invoicePaymentOptions.optionType, "virtual_account"),
+        eq(invoicePaymentOptions.status, "active"),
+      ),
+    )
+    .limit(1);
+
+  if (!existingOption) {
+    await db.insert(invoicePaymentOptions).values({
+      organizationId: invoice.organizationId,
+      invoiceId: invoice.id,
+      provider: "nomba",
+      optionType: "virtual_account",
+      payerVirtualAccountId: account.id,
+      providerReference: account.accountRef,
+      accountRef: account.accountRef,
+      accountNumber: account.accountNumber,
+      accountName: account.accountName,
+      bankName: account.bankName,
+      expectedAmountKobo: Math.max(
+        invoice.amountDueKobo - invoice.amountPaidKobo,
+        0,
+      ),
+      currency: invoice.currency,
+      status: "active",
+      rawProviderResponse: account.rawProviderResponse,
+    });
+  }
+
+  return account;
 }
 export async function createOrReuseCheckoutForPublicInvoice(
   publicToken: string,

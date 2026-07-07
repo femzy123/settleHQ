@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { collections, invoices, payments, receipts } from "@/db/schema";
+import { collections, invoices, payerVirtualAccounts, payments, receipts } from "@/db/schema";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -61,6 +61,7 @@ export type PayerSummary = PayerSummaryInput & {
 };
 
 export type PayerDetailData = {
+  virtualAccount: typeof payerVirtualAccounts.$inferSelect | null;
   summary: PayerSummary;
   invoices: PayerInvoiceRecord[];
   payments: PayerPaymentHistoryRecord[];
@@ -119,7 +120,7 @@ export async function getPayerDetailData(
   payerId: number,
   db: Db = getDb(),
 ): Promise<PayerDetailData> {
-  const [invoiceRows, paymentRows] = await Promise.all([
+  const [invoiceRows, paymentRows, virtualAccountRows] = await Promise.all([
     db
       .select({
         id: invoices.id,
@@ -180,6 +181,17 @@ export async function getPayerDetailData(
         ),
       )
       .orderBy(desc(payments.paidAt), desc(payments.id)),
+    db
+      .select()
+      .from(payerVirtualAccounts)
+      .where(
+        and(
+          eq(payerVirtualAccounts.organizationId, organizationId),
+          eq(payerVirtualAccounts.payerId, payerId),
+          eq(payerVirtualAccounts.provider, "nomba"),
+        ),
+      )
+      .limit(1),
   ]);
 
   const payerInvoices = invoiceRows.map((row) => ({
@@ -200,6 +212,7 @@ export async function getPayerDetailData(
   }));
 
   return {
+    virtualAccount: virtualAccountRows[0] ?? null,
     summary: buildSummaryFromInvoices(payerInvoices, paymentRows.length),
     invoices: payerInvoices,
     payments: paymentRows.map((row) => ({

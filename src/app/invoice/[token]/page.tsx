@@ -3,6 +3,7 @@ import {
   Building2,
   CheckCircle2,
   Clock3,
+  Landmark,
   ReceiptText,
 } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -23,6 +24,7 @@ import { formatDate, formatKoboAsNaira } from "@/lib/money";
 import { formatPaymentMethodLabel } from "@/server/payment-records";
 import {
   getActiveCheckoutForInvoice,
+  getOrCreatePublicInvoiceVirtualAccount,
   getPublicInvoiceByToken,
   listReceiptsForInvoice,
 } from "@/server/invoices";
@@ -63,9 +65,10 @@ export default async function PublicInvoicePage({
     notFound();
   }
 
-  const [checkout, receiptRows] = await Promise.all([
+  const [checkout, receiptRows, virtualAccount] = await Promise.all([
     getActiveCheckoutForInvoice(invoice.organizationId, invoice.id),
     listReceiptsForInvoice(invoice.organizationId, invoice.id),
+    getOrCreatePublicInvoiceVirtualAccount(token),
   ]);
   const latestReceipt = receiptRows[0] ?? null;
   const outstandingKobo = Math.max(
@@ -282,15 +285,51 @@ export default async function PublicInvoicePage({
           </div>
 
           <aside className="flex flex-col gap-5">
+            {!isPaid ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Bank transfer</CardTitle>
+                  <CardDescription>
+                    Transfer to this dedicated account for {invoice.payer.fullName}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  {virtualAccount?.status === "active" ? (
+                    <div className="grid gap-3">
+                      <div className="rounded-lg border border-border bg-muted/35 p-4">
+                        <div className="flex items-center gap-2 font-medium">
+                          <Landmark aria-hidden="true" />
+                          {virtualAccount.bankName || "Bank account"}
+                        </div>
+                        <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">
+                          {virtualAccount.accountNumber}
+                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {virtualAccount.accountName || invoice.payer.fullName}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-surface p-4 text-sm text-muted-foreground">
+                        Send exactly {formatKoboAsNaira(outstandingKobo, invoice.currency)}. This invoice updates automatically after Nomba confirms the transfer.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-border bg-muted/35 p-4 text-sm text-muted-foreground">
+                      Bank transfer instructions are being prepared. Use Checkout below if you want to pay now.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {isPaid ? "Payment complete" : "Pay securely"}
+                  {isPaid ? "Payment complete" : "Pay with Checkout"}
                 </CardTitle>
                 <CardDescription>
                   {isPaid
                     ? "SettleHQ has verified this payment."
-                    : "Nomba Checkout supports card and bank transfer."}
+                    : "Nomba Checkout supports card and transfer payments."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">

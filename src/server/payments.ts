@@ -1,15 +1,18 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
   invoicePaymentOptions,
   invoices,
+  nombaVirtualAccountTransactions,
   organizationLedgerEntries,
+  payerVirtualAccounts,
   payments,
   receipts,
   reconciliationEvents,
   webhookEvents,
 } from "@/db/schema";
+import { parseNombaVirtualAccountPayment } from "@/lib/nomba-virtual-account";
 import {
   parseNombaPaymentWebhook,
   type NombaPaymentWebhookPayload,
@@ -143,6 +146,359 @@ async function updateWebhookStatus(
     .where(eq(webhookEvents.id, webhookEventId));
 }
 
+
+async function findVirtualAccountForWebhook(
+  payload: NombaPaymentWebhookPayload,
+  db: Db,
+) {
+  const parsed = parseNombaVirtualAccountPayment(payload);
+  const conditions = [];
+
+  if (parsed.accountRef) {
+    conditions.push(eq(payerVirtualAccounts.accountRef, parsed.accountRef));
+  }
+
+  if (parsed.accountNumber) {
+    conditions.push(
+      eq(payerVirtualAccounts.accountNumber, parsed.accountNumber),
+    );
+  }
+
+  if (conditions.length === 0) {
+    return null;
+  }
+
+  const [account] = await db
+    .select()
+    .from(payerVirtualAccounts)
+    .where(and(eq(payerVirtualAccounts.provider, "nomba"), or(...conditions)!))
+    .limit(1);
+
+  return account ? { account, parsed } : null;
+}
+
+async function findOpenInvoiceForPayer(
+  organizationId: number,
+  payerId: number,
+  db: Db,
+) {
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.organizationId, organizationId),
+        eq(invoices.payerId, payerId),
+        or(eq(invoices.status, "pending"), eq(invoices.status, "reconciliation_required"))!,
+      ),
+    )
+    .orderBy(asc(invoices.dueDate), asc(invoices.createdAt))
+    .limit(1);
+
+  return invoice ?? null;
+}
+
+async function findVirtualAccountPaymentOption(
+  invoiceId: number,
+  payerVirtualAccountId: number,
+  db: Db,
+) {
+  const [option] = await db
+    .select()
+    .from(invoicePaymentOptions)
+    .where(
+      and(
+        eq(invoicePaymentOptions.invoiceId, invoiceId),
+        eq(invoicePaymentOptions.payerVirtualAccountId, payerVirtualAccountId),
+        eq(invoicePaymentOptions.optionType, "virtual_account"),
+        eq(invoicePaymentOptions.status, "active"),
+      ),
+    )
+    .limit(1);
+
+  return option ?? null;
+}
+
+async function recordVirtualAccountTransaction(
+  values: typeof nombaVirtualAccountTransactions.$inferInsert,
+  db: Db,
+) {
+  try {
+    await db.insert(nombaVirtualAccountTransactions).values(values);
+  } catch {
+    // The payment table is the source of truth for idempotency. This mirror can
+    // already exist if Nomba retries the same transaction payload.
+  }
+}
+
+async function processVirtualAccountWebhook(
+  webhookEventId: number,
+  payload: NombaPaymentWebhookPayload,
+  db: Db,
+) {
+  const match = await findVirtualAccountForWebhook(payload, db);
+
+  if (!match) {
+    return null;
+  }
+
+  const { account, parsed } = match;
+  const providerReference =
+    parsed.providerReference ?? parsed.providerTransactionId ?? parsed.accountRef;
+
+  if (!providerReference) {
+    await updateWebhookStatus(
+      webhookEventId,
+      {
+        payerId: account.payerId,
+        payerVirtualAccountId: account.id,
+        accountRef: account.accountRef,
+        processingStatus: "failed",
+        errorMessage: "Virtual account webhook has no usable transaction reference.",
+      },
+      db,
+    );
+
+    return { processed: false, reason: "Missing virtual account reference" };
+  }
+
+  if (!parsed.amountKobo || parsed.amountKobo <= 0) {
+    await updateWebhookStatus(
+      webhookEventId,
+      {
+        payerId: account.payerId,
+        payerVirtualAccountId: account.id,
+        accountRef: account.accountRef,
+        processingStatus: "failed",
+        errorMessage: "Virtual account webhook has no valid amount.",
+      },
+      db,
+    );
+
+    return { processed: false, reason: "Missing virtual account amount" };
+  }
+
+  const invoice = await findOpenInvoiceForPayer(
+    account.organizationId,
+    account.payerId,
+    db,
+  );
+
+  if (!invoice) {
+    await recordVirtualAccountTransaction(
+      {
+        organizationId: account.organizationId,
+        payerVirtualAccountId: account.id,
+        payerId: account.payerId,
+        providerTransactionId: parsed.providerTransactionId,
+        providerReference,
+        accountRef: account.accountRef,
+        amountKobo: parsed.amountKobo,
+        currency: parsed.currency,
+        transactionType: "credit",
+        transactionStatus: "success",
+        narration: parsed.narration,
+        senderName: parsed.senderName,
+        senderAccountNumber: parsed.senderAccountNumber,
+        transactionDate: parsed.paidAt,
+        processingStatus: "received",
+        rawProviderPayload: payload,
+      },
+      db,
+    );
+    await updateWebhookStatus(
+      webhookEventId,
+      {
+        organizationId: account.organizationId,
+        payerId: account.payerId,
+        payerVirtualAccountId: account.id,
+        accountRef: account.accountRef,
+        processingStatus: "failed",
+        errorMessage: "Virtual account payment has no open invoice for this payer.",
+      },
+      db,
+    );
+
+    return { processed: false, reason: "No open invoice for payer" };
+  }
+
+  const existingPayment = await findExistingPayment(providerReference, db);
+
+  if (existingPayment) {
+    await updateWebhookStatus(
+      webhookEventId,
+      {
+        organizationId: account.organizationId,
+        invoiceId: invoice.id,
+        payerId: account.payerId,
+        payerVirtualAccountId: account.id,
+        accountRef: account.accountRef,
+        processingStatus: "duplicate",
+        errorMessage: null,
+      },
+      db,
+    );
+
+    return {
+      processed: true,
+      duplicate: true,
+      paymentId: existingPayment.id,
+      invoiceId: invoice.id,
+    };
+  }
+
+  const paymentOption = await findVirtualAccountPaymentOption(
+    invoice.id,
+    account.id,
+    db,
+  );
+  const amountPaidKobo = invoice.amountPaidKobo + parsed.amountKobo;
+  const invoiceStatus =
+    amountPaidKobo === invoice.amountDueKobo
+      ? "paid"
+      : "reconciliation_required";
+  const reconciliationStatus =
+    amountPaidKobo === invoice.amountDueKobo
+      ? "matched_automatically"
+      : amountPaidKobo < invoice.amountDueKobo
+        ? "underpayment"
+        : "overpayment";
+
+  const [payment] = await db
+    .insert(payments)
+    .values({
+      organizationId: invoice.organizationId,
+      invoiceId: invoice.id,
+      collectionId: invoice.collectionId,
+      payerId: invoice.payerId,
+      invoicePaymentOptionId: paymentOption?.id,
+      webhookEventId,
+      payerVirtualAccountId: account.id,
+      amountKobo: parsed.amountKobo,
+      currency: invoice.currency,
+      paymentMethod: "bank_transfer",
+      provider: "nomba",
+      providerReference,
+      providerSessionId: parsed.providerSessionId,
+      providerStatus: "success",
+      verificationStatus: "verified",
+      paidAt: parsed.paidAt,
+      verifiedAt: new Date(),
+      rawProviderPayload: payload,
+    })
+    .returning();
+
+  await db
+    .update(invoices)
+    .set({ amountPaidKobo, status: invoiceStatus, updatedAt: new Date() })
+    .where(eq(invoices.id, invoice.id));
+
+  if (paymentOption) {
+    await db
+      .update(invoicePaymentOptions)
+      .set({ status: "active", updatedAt: new Date() })
+      .where(eq(invoicePaymentOptions.id, paymentOption.id));
+  }
+
+  if (invoiceStatus === "paid" && !(await receiptExistsForPayment(payment.id, db))) {
+    await db.insert(receipts).values({
+      organizationId: invoice.organizationId,
+      paymentId: payment.id,
+      invoiceId: invoice.id,
+      payerId: invoice.payerId,
+      receiptNumber: getReceiptNumber(payment.id),
+      amountKobo: parsed.amountKobo,
+      currency: invoice.currency,
+    });
+  }
+
+  const ledgerReference = `nomba:va:${providerReference}`;
+
+  if (!(await ledgerEntryExists(ledgerReference, db))) {
+    await db.insert(organizationLedgerEntries).values({
+      organizationId: invoice.organizationId,
+      paymentId: payment.id,
+      entryType: "payment_credit",
+      direction: "credit",
+      amountKobo: parsed.amountKobo,
+      currency: invoice.currency,
+      reference: ledgerReference,
+      description: `Bank transfer received for ${invoice.invoiceNumber}`,
+      metadata: {
+        invoiceId: String(invoice.id),
+        invoiceNumber: invoice.invoiceNumber,
+        payerId: String(invoice.payerId),
+        collectionId: String(invoice.collectionId),
+        providerReference,
+        accountRef: account.accountRef,
+      },
+    });
+  }
+
+  await recordVirtualAccountTransaction(
+    {
+      organizationId: invoice.organizationId,
+      payerVirtualAccountId: account.id,
+      payerId: invoice.payerId,
+      invoiceId: invoice.id,
+      paymentId: payment.id,
+      providerTransactionId: parsed.providerTransactionId,
+      providerReference,
+      accountRef: account.accountRef,
+      amountKobo: parsed.amountKobo,
+      currency: invoice.currency,
+      transactionType: "credit",
+      transactionStatus: "success",
+      narration: parsed.narration,
+      senderName: parsed.senderName,
+      senderAccountNumber: parsed.senderAccountNumber,
+      transactionDate: parsed.paidAt,
+      processingStatus: "processed",
+      rawProviderPayload: payload,
+    },
+    db,
+  );
+
+  await db.insert(reconciliationEvents).values({
+    organizationId: invoice.organizationId,
+    webhookEventId,
+    paymentId: payment.id,
+    invoiceId: invoice.id,
+    invoicePaymentOptionId: paymentOption?.id,
+    reconciliationStatus,
+    matchType: "virtual_account_ref",
+    confidenceScore: "100.00",
+    expectedAmountKobo: invoice.amountDueKobo,
+    receivedAmountKobo: parsed.amountKobo,
+    reason:
+      reconciliationStatus === "matched_automatically"
+        ? "Bank transfer matched through the payer dedicated account."
+        : "Bank transfer amount differs from the invoice amount.",
+  });
+
+  await updateWebhookStatus(
+    webhookEventId,
+    {
+      organizationId: invoice.organizationId,
+      invoiceId: invoice.id,
+      payerId: invoice.payerId,
+      payerVirtualAccountId: account.id,
+      accountRef: account.accountRef,
+      processingStatus: "processed",
+      errorMessage: null,
+    },
+    db,
+  );
+
+  return {
+    processed: true,
+    duplicate: false,
+    paymentId: payment.id,
+    invoiceId: invoice.id,
+    invoiceStatus,
+    reconciliationStatus,
+  };
+}
 export async function processVerifiedNombaWebhook(
   webhookEventId: number,
   payload: NombaPaymentWebhookPayload,

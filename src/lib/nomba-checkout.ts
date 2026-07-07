@@ -1,6 +1,5 @@
 export const NOMBA_CHECKOUT_ALLOWED_PAYMENT_METHODS = [
   "Card",
-  "Transfer",
 ] as const;
 
 export type NombaCheckoutMetadata = Record<string, string>;

@@ -183,6 +183,53 @@ export const payers = pgTable(
   ],
 );
 
+export const payerVirtualAccounts = pgTable(
+  "payer_virtual_accounts",
+  {
+    id: id(),
+    organizationId: bigint("organization_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    payerId: bigint("payer_id", { mode: "number" })
+      .notNull()
+      .references(() => payers.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("nomba"),
+    providerVirtualAccountId: text("provider_virtual_account_id"),
+    providerAccountId: text("provider_account_id"),
+    accountRef: text("account_ref").notNull(),
+    accountNumber: text("account_number").notNull(),
+    accountName: text("account_name"),
+    bankName: text("bank_name"),
+    bankCode: text("bank_code"),
+    currency: text("currency").notNull().default("NGN"),
+    assignmentType: text("assignment_type").notNull().default("dedicated"),
+    status: text("status").notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    rawProviderResponse: jsonb("raw_provider_response")
+      .notNull()
+      .default(emptyJson),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("payer_virtual_accounts_organization_id_idx").on(
+      table.organizationId,
+    ),
+    index("payer_virtual_accounts_payer_id_idx").on(table.payerId),
+    uniqueIndex("payer_virtual_accounts_provider_account_ref_idx").on(
+      table.provider,
+      table.accountRef,
+    ),
+    uniqueIndex("payer_virtual_accounts_provider_account_number_idx").on(
+      table.provider,
+      table.accountNumber,
+    ),
+    uniqueIndex("payer_virtual_accounts_one_active_per_payer_idx")
+      .on(table.organizationId, table.payerId, table.provider)
+      .where(sql`${table.status} in ('pending', 'active')`),
+  ],
+);
+
 export const collections = pgTable(
   "collections",
   {
@@ -306,6 +353,10 @@ export const invoicePaymentOptions = pgTable(
     customerEmail: text("customer_email"),
     callbackUrl: text("callback_url"),
     successUrl: text("success_url"),
+    payerVirtualAccountId: bigint("payer_virtual_account_id", {
+      mode: "number",
+    }).references(() => payerVirtualAccounts.id, { onDelete: "set null" }),
+    accountRef: text("account_ref"),
     expectedAmountKobo: bigint("expected_amount_kobo", {
       mode: "number",
     }).notNull(),
@@ -323,6 +374,9 @@ export const invoicePaymentOptions = pgTable(
       table.organizationId,
     ),
     index("invoice_payment_options_invoice_id_idx").on(table.invoiceId),
+    index("invoice_payment_options_payer_virtual_account_id_idx").on(
+      table.payerVirtualAccountId,
+    ),
     index("invoice_payment_options_order_reference_idx").on(
       table.provider,
       table.orderReference,
@@ -348,6 +402,14 @@ export const webhookEvents = pgTable(
       () => invoices.id,
       { onDelete: "set null" },
     ),
+    payerId: bigint("payer_id", { mode: "number" }).references(
+      () => payers.id,
+      { onDelete: "set null" },
+    ),
+    payerVirtualAccountId: bigint("payer_virtual_account_id", {
+      mode: "number",
+    }).references(() => payerVirtualAccounts.id, { onDelete: "set null" }),
+    accountRef: text("account_ref"),
     provider: text("provider").notNull().default("nomba"),
     providerEventId: text("provider_event_id"),
     eventType: text("event_type"),
@@ -367,6 +429,9 @@ export const webhookEvents = pgTable(
   (table) => [
     index("webhook_events_organization_id_idx").on(table.organizationId),
     index("webhook_events_invoice_id_idx").on(table.invoiceId),
+    index("webhook_events_payer_virtual_account_id_idx").on(
+      table.payerVirtualAccountId,
+    ),
     uniqueIndex("webhook_events_unique_provider_event_id_idx")
       .on(table.provider, table.providerEventId)
       .where(sql`${table.providerEventId} is not null`),
@@ -402,6 +467,9 @@ export const payments = pgTable(
     webhookEventId: bigint("webhook_event_id", { mode: "number" }).references(
       () => webhookEvents.id,
     ),
+    payerVirtualAccountId: bigint("payer_virtual_account_id", {
+      mode: "number",
+    }).references(() => payerVirtualAccounts.id, { onDelete: "set null" }),
     amountKobo: bigint("amount_kobo", { mode: "number" }).notNull(),
     currency: text("currency").notNull().default("NGN"),
     paymentMethod: text("payment_method").notNull().default("unknown"),
@@ -428,10 +496,71 @@ export const payments = pgTable(
     index("payments_invoice_id_idx").on(table.invoiceId),
     index("payments_collection_id_idx").on(table.collectionId),
     index("payments_payer_id_idx").on(table.payerId),
+    index("payments_payer_virtual_account_id_idx").on(
+      table.payerVirtualAccountId,
+    ),
     index("payments_organization_paid_at_idx").on(
       table.organizationId,
       table.paidAt.desc(),
     ),
+  ],
+);
+
+export const nombaVirtualAccountTransactions = pgTable(
+  "nomba_virtual_account_transactions",
+  {
+    id: id(),
+    organizationId: bigint("organization_id", { mode: "number" })
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    payerVirtualAccountId: bigint("payer_virtual_account_id", {
+      mode: "number",
+    }).references(() => payerVirtualAccounts.id, { onDelete: "set null" }),
+    payerId: bigint("payer_id", { mode: "number" }).references(
+      () => payers.id,
+      { onDelete: "set null" },
+    ),
+    invoiceId: bigint("invoice_id", { mode: "number" }).references(
+      () => invoices.id,
+      { onDelete: "set null" },
+    ),
+    paymentId: bigint("payment_id", { mode: "number" }).references(
+      () => payments.id,
+      { onDelete: "set null" },
+    ),
+    provider: text("provider").notNull().default("nomba"),
+    providerTransactionId: text("provider_transaction_id"),
+    providerReference: text("provider_reference"),
+    accountRef: text("account_ref"),
+    amountKobo: bigint("amount_kobo", { mode: "number" }).notNull(),
+    currency: text("currency").notNull().default("NGN"),
+    transactionType: text("transaction_type").notNull().default("credit"),
+    transactionStatus: text("transaction_status").notNull().default("success"),
+    narration: text("narration"),
+    senderName: text("sender_name"),
+    senderAccountNumber: text("sender_account_number"),
+    transactionDate: timestamp("transaction_date", { withTimezone: true }),
+    processingStatus: text("processing_status").notNull().default("received"),
+    rawProviderPayload: jsonb("raw_provider_payload")
+      .notNull()
+      .default(emptyJson),
+    createdAt,
+  },
+  (table) => [
+    index("nomba_va_transactions_org_date_idx").on(
+      table.organizationId,
+      table.transactionDate.desc(),
+    ),
+    index("nomba_va_transactions_account_ref_idx").on(
+      table.provider,
+      table.accountRef,
+    ),
+    uniqueIndex("nomba_va_transactions_provider_transaction_id_idx")
+      .on(table.provider, table.providerTransactionId)
+      .where(sql`${table.providerTransactionId} is not null`),
+    uniqueIndex("nomba_va_transactions_provider_reference_idx")
+      .on(table.provider, table.providerReference)
+      .where(sql`${table.providerReference} is not null`),
   ],
 );
 

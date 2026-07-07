@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { canUseDb, getDb } from "@/db";
+import { parseNombaVirtualAccountPayment } from "@/lib/nomba-virtual-account";
 import { webhookEvents } from "@/db/schema";
 import { processVerifiedNombaWebhook } from "@/server/payments";
 import {
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
   const data = asObject(payload.data);
   const merchant = asObject(data.merchant);
   const transaction = asObject(data.transaction);
+  const virtualAccountPayment = parseNombaVirtualAccountPayment(payload);
 
   const event = {
     provider: "nomba",
@@ -95,11 +97,15 @@ export async function POST(request: Request) {
       "type",
     ]),
     providerReference:
+      virtualAccountPayment.providerReference ||
       asString(transaction.aliasAccountReference) ||
       asString(transaction.transactionId) ||
       pickString(payload, ["reference", "transactionReference"]),
-    providerSessionId: asString(transaction.sessionId) || null,
-    providerAccountId: asString(merchant.walletId) || null,
+    providerSessionId:
+      virtualAccountPayment.providerSessionId || asString(transaction.sessionId) || null,
+    providerAccountId:
+      virtualAccountPayment.providerAccountId || asString(merchant.walletId) || null,
+    accountRef: virtualAccountPayment.accountRef,
     signatureValid: true,
     processingStatus: "verified",
     headers: headersToRecord(request.headers),
